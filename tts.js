@@ -13,6 +13,7 @@ module.exports = {
 
 // Returns local voice .ogg path
 async function synthesize(messageId, text, voice = DEFAULT_VOICE) {
+    voice = voice || DEFAULT_VOICE
     console.log(
         `[synthesize] sending voice synthesize request. messageId=${messageId} text length="${text.length}" voice=${voice}`,
     )
@@ -31,7 +32,7 @@ async function synthesize(messageId, text, voice = DEFAULT_VOICE) {
         messageId + '.ogg',
     )
     const audioConfig = sdk.AudioConfig.fromAudioFileOutput(localOggPath)
-    speechConfig.speechSynthesisVoiceName = voice || DEFAULT_VOICE
+    speechConfig.speechSynthesisVoiceName = voice
 
     let synthesizer = new sdk.SpeechSynthesizer(speechConfig, audioConfig)
 

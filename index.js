@@ -493,7 +493,7 @@ For example, <code>/voice en-US-AriaNeural</code>`,
     // Fetch chatgpt completion
     const history = await db.listHistory(userId, chatId)
 
-    const response = await openai.fetchChatResponse(
+    const { response, elapsed: gptElapsed } = await openai.fetchChatResponse(
         history,
         userText,
         chat.temperature,
@@ -518,6 +518,7 @@ For example, <code>/voice en-US-AriaNeural</code>`,
         messageId,
         answer: response.data.choices[0].message.content,
         answerTokens: response.data.usage.completion_tokens,
+        gptElapsed,
     })
 
     // Note, sendVoice caption text length limited to 1024 chars.

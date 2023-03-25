@@ -30,8 +30,8 @@ module.exports = class TelegramClient {
 
         if (response.status !== 200) {
             console.error(
-                `Non-200 Telegram API response from ${method} ${url} ${params} -- Response body: ` +
-                    (await response.json()),
+                `Non-200 Telegram API response from ${method} ${url} ${params} -- status: ${response.status} ${response.statusText}, body: ` +
+                    JSON.stringify(await response.json(), null, 2),
             )
         }
 
@@ -144,7 +144,7 @@ module.exports = class TelegramClient {
     }
 
     async editMessageReplyMarkup(chatId, messageId, inlineKeyboard) {
-        return telegram.request('editMessageReplyMarkup', {
+        return this.request('editMessageReplyMarkup', {
             chat_id: chatId,
             message_id: messageId,
             reply_markup: JSON.stringify({

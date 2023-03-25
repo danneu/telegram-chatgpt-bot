@@ -99,15 +99,25 @@ module.exports.insertAnswer = async function ({
     answer,
     promptTokens,
     answerTokens,
+    gptElapsed,
 }) {
     return one(
         pool,
         `
-    insert into prompts (chat_id, user_id, prompt, message_id, answer, prompt_tokens, answer_tokens)
-    values ($1, $2, $3, $4, $5, $6, $7)
+    insert into prompts (chat_id, user_id, prompt, message_id, answer, prompt_tokens, answer_tokens, gpt_elapsed)
+    values ($1, $2, $3, $4, $5, $6, $7, $8)
     returning *
 `,
-        [chatId, userId, prompt, messageId, answer, promptTokens, answerTokens],
+        [
+            chatId,
+            userId,
+            prompt,
+            messageId,
+            answer,
+            promptTokens,
+            answerTokens,
+            gptElapsed,
+        ],
     )
 }
 

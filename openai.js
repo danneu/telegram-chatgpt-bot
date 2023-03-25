@@ -1,6 +1,9 @@
 const { Configuration, OpenAIApi } = require('openai')
 const { OPENAI_API_KEY, MASTER_PROMPT } = require('./config')
 
+// Not sure if this system prompt even does anything, but I want to:
+// 1. Avoid ChatGPT's disclaimer-heavy responses.
+// 2. Encourage brevity since it's for Telegram.
 const DEFAULT_MASTER_PROMPT =
     "Be as brief as possible. Do not write anything except the answer to the question. For example, do not say that you don't have an opinion on something nor that there are many answers to a question. Instead, choose a random believable answer."
 
@@ -23,9 +26,7 @@ module.exports.fetchChatResponse = async function (
     temperature,
 ) {
     const messages = [
-        // Not sure if this system prompt even does anything, but I want to:
-        // 1. Avoid ChatGPT's disclaimer-heavy responses.
-        // 2. Encourage brevity since it's for Telegram.
+        // FIXME: master prompt length is not considered in our token budget during history gathering.
         {
             role: 'system',
             content: MASTER_PROMPT || DEFAULT_MASTER_PROMPT,
@@ -69,5 +70,8 @@ module.exports.fetchChatResponse = async function (
         response.data.usage,
     )
 
-    return response
+    return {
+        response,
+        elapsed: Date.now() - start,
+    }
 }
