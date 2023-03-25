@@ -562,11 +562,6 @@ For example, <code>/voice en-US-AriaNeural</code>`,
                 // Start the edit loop after we have our first message so that at least 1000ms of tokens have
                 // accumulated.
                 setTimeout(editLoop, 1000)
-
-                // Send one more typing indicator that should cover the following edits.
-                // Too bad there's no cancelChatAction Telegram API method since the indicator
-                // might play for too long.
-                await telegram.indicateTyping(chatId)
             }
         }
 
