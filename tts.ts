@@ -1,31 +1,34 @@
-const {
-    SpeechSynthesisOutputFormat,
-} = require('microsoft-cognitiveservices-speech-sdk')
-const sdk = require('microsoft-cognitiveservices-speech-sdk')
-const { AZURE_SPEECH_KEY, AZURE_SPEECH_REGION } = require('./config')
+import * as sdk from 'microsoft-cognitiveservices-speech-sdk'
+import { AZURE_SPEECH_KEY, AZURE_SPEECH_REGION } from './config'
+import { join } from 'path'
 
-const DEFAULT_VOICE = 'en-US-JennyMultilingualNeural'
-
-module.exports = {
-    synthesize,
-    DEFAULT_VOICE,
-}
+export const DEFAULT_VOICE = 'en-US-JennyMultilingualNeural'
 
 // Returns local voice .ogg path
-async function synthesize(messageId, text, voice = DEFAULT_VOICE) {
+export async function synthesize(
+    messageId: number,
+    text: string,
+    voice = DEFAULT_VOICE,
+): Promise<{
+    path: string
+    elapsed: number
+    byteLength: number
+}> {
     voice = voice || DEFAULT_VOICE
     console.log(
         `[synthesize] sending voice synthesize request. messageId=${messageId} text length="${text.length}" voice=${voice}`,
     )
+    console.log({ AZURE_SPEECH_KEY, AZURE_SPEECH_REGION })
     const speechConfig = sdk.SpeechConfig.fromSubscription(
         AZURE_SPEECH_KEY,
         AZURE_SPEECH_REGION,
     )
+    console.log({ speechConfig })
     // TODO: Try other bitrates.
     speechConfig.speechSynthesisOutputFormat =
         // SpeechSynthesisOutputFormat.Audio16Khz16Bit32KbpsMonoOpus
-        SpeechSynthesisOutputFormat.Ogg16Khz16BitMonoOpus
-    const localOggPath = require('path').join(
+        sdk.SpeechSynthesisOutputFormat.Ogg16Khz16BitMonoOpus
+    const localOggPath = join(
         __dirname,
         'tmp',
         'answer-voice',
@@ -52,6 +55,7 @@ async function synthesize(messageId, text, voice = DEFAULT_VOICE) {
                 ) {
                     // console.log(`[synthesize] result:`, result)
                     resolve({
+                        //@ts-ignore
                         byteLength: result.privAudioData.byteLength,
                         elapsed: Date.now() - start,
                         path: localOggPath,
@@ -66,7 +70,6 @@ async function synthesize(messageId, text, voice = DEFAULT_VOICE) {
                     )
                 }
                 synthesizer.close()
-                synthesizer = null
             },
             (err) => {
                 console.log(
@@ -76,7 +79,6 @@ async function synthesize(messageId, text, voice = DEFAULT_VOICE) {
                 )
                 reject(err)
                 synthesizer.close()
-                synthesizer = null
             },
         )
     })

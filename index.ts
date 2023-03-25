@@ -1,33 +1,33 @@
 // first party
-const openai = require('./openai')
-const db = require('./db')
-const tts = require('./tts')
-const config = require('./config')
-const TelegramClient = require('./telegram')
-const { countTokens } = require('./tokenizer')
-const prettyVoice = require('./pretty-voice')
+import * as openai from './openai'
+import * as db from './db'
+import * as tts from './tts'
+import * as config from './config'
+import TelegramClient from './telegram'
+import { countTokens } from './tokenizer'
+import prettyVoice from './pretty-voice'
 // third party
-const ffmpeg = require('fluent-ffmpeg')
+import ffmpeg from 'fluent-ffmpeg'
 // server
-const Koa = require('koa')
-const Router = require('@koa/router')
-const logger = require('koa-logger')
-const bodyParser = require('koa-bodyparser')
+import Koa from 'koa'
+import Router from '@koa/router'
+import logger from 'koa-logger'
+import bodyParser from 'koa-bodyparser'
 // Node
-const assert = require('assert')
-const { createWriteStream, createReadStream } = require('fs')
-const { unlink, readdir } = require('fs/promises')
-const { Readable } = require('stream')
-const { finished } = require('stream/promises')
+import assert from 'assert'
+import { createWriteStream, createReadStream } from 'fs'
+import { unlink, readdir } from 'fs/promises'
+import { Readable } from 'stream'
+import { finished } from 'stream/promises'
+import { join } from 'path'
 
 const telegram = new TelegramClient(config.TELEGRAM_BOT_TOKEN)
 
 const PER_USER_CONCURRENCY = 3
 // Mapping of user_id to the number of requests they have in flight.
-const inflights = {}
+const inflights: { [key: number]: number } = {}
 
 async function cleanTmpDirectory() {
-    const { join } = require('path')
     let dir = 'tmp/answer-voice'
     for (const file of await readdir(dir)) {
         if (file === '.gitkeep') continue
@@ -46,42 +46,38 @@ async function initializeBot() {
 
     // https://core.telegram.org/bots/api#authorizing-your-bot
     // Check if webhook: https://core.telegram.org/bots/api#getwebhookinfo
-    const webhookInfo = await telegram
-        .request('getWebhookInfo')
-        .then((x) => x.json())
+    const webhookInfo = await telegram.getWebhookInfo()
 
-    if (!webhookInfo.url) {
-        await telegram.request('setWebhook', {
+    if (webhookInfo.url !== config.WEBHOOK_URL) {
+        await telegram.setWebhook({
             url: config.WEBHOOK_URL,
             // allowed_updates: ['message'],
         })
     }
 
-    await telegram.request('setMyCommands', {
-        commands: JSON.stringify([
-            {
-                command: 'setvoice',
-                description: 'set bot language',
-            },
-            {
-                command: 'voiceoff',
-                description: 'disable voice responses',
-            },
-            {
-                command: 'voiceon',
-                description: 'enable voice responses',
-            },
-            {
-                command: 'settemp',
-                description: 'set temperature (randomness)',
-            },
-            { command: 'info', description: 'show bot settings' },
-            {
-                command: 'clear',
-                description: 'reset chat context',
-            },
-        ]),
-    })
+    await telegram.setMyCommands([
+        {
+            command: 'setvoice',
+            description: 'set bot language',
+        },
+        {
+            command: 'voiceoff',
+            description: 'disable voice responses',
+        },
+        {
+            command: 'voiceon',
+            description: 'enable voice responses',
+        },
+        {
+            command: 'settemp',
+            description: 'set temperature (randomness)',
+        },
+        { command: 'info', description: 'show bot settings' },
+        {
+            command: 'clear',
+            description: 'reset chat context',
+        },
+    ])
 }
 
 ////////////////////////////////////////////////////////////
@@ -97,31 +93,25 @@ router.get('/', async (ctx) => {
     ctx.body = 'Bot is online'
 })
 
-// Returns string
-async function fetchOggAndConvertToMp3(oggUrl, fileId) {
-    const localOggPath = require('path').join(
-        __dirname,
-        'tmp',
-        'user-voice',
-        fileId + '.ogg',
-    )
-    const localMp3Path = require('path').join(
-        __dirname,
-        'tmp',
-        'user-voice',
-        fileId + '.mp3',
-    )
+async function fetchOggAndConvertToMp3(
+    oggUrl: string,
+    fileId: string,
+): Promise<string> {
+    const localOggPath = join(__dirname, 'tmp', 'user-voice', fileId + '.ogg')
+    const localMp3Path = join(__dirname, 'tmp', 'user-voice', fileId + '.mp3')
 
     const response = await fetch(oggUrl)
+    const body = response.body!
     if (response.status !== 200) {
         throw new Error('TODO: Handle this error')
     }
     const writableSteam = createWriteStream(localOggPath)
+    //@ts-ignore
     await finished(Readable.fromWeb(response.body).pipe(writableSteam))
     console.log(`wrote ${localOggPath}`)
 
     // Convert .ogg -> .mp3
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
         const start = Date.now()
         ffmpeg()
             .input(localOggPath)
@@ -150,7 +140,7 @@ async function fetchOggAndConvertToMp3(oggUrl, fileId) {
 //
 //
 // Note: Always have an even number of voices per country.
-const VOICE_MENU = {
+const VOICE_MENU: { [key: string]: any } = {
     English: {
         Australia: {
             Annette: 'en-AU-AnnetteNeural',
@@ -191,7 +181,7 @@ const VOICE_MENU = {
     },
 }
 
-function chunksOf(chunkSize, arr) {
+function chunksOf<T>(chunkSize: number, arr: T[]) {
     const res = []
     for (let i = 0; i < arr.length; i += chunkSize) {
         const chunk = arr.slice(i, i + chunkSize)
@@ -200,7 +190,7 @@ function chunksOf(chunkSize, arr) {
     return res
 }
 
-async function handleCallbackQuery(body) {
+async function handleCallbackQuery(body: { [key: string]: any }) {
     // https://core.telegram.org/bots/api#inlinekeyboardmarkup
     const chatId = body.callback_query.from.id
     const messageId = body.callback_query.message.message_id
@@ -208,7 +198,7 @@ async function handleCallbackQuery(body) {
     const callbackData = body.callback_query.data
 
     if (callbackData.startsWith('temp:')) {
-        const temperature = Number.parseFloat(callbackData.split(':')[1])
+        let temperature = Number.parseFloat(callbackData.split(':')[1])
         if (temperature < 0) temperature = 0
         if (temperature > 1) temperature = 1
         console.log('setting temp', temperature)
@@ -229,7 +219,7 @@ async function handleCallbackQuery(body) {
     // voice:English --> show the countries
     // voice:English:US --> show the US voices
     // voice:English:US:Jenny -> pick the Jenny voice
-    const segments = callbackData.split(':')
+    const segments: string[] = callbackData.split(':')
     switch (segments.length) {
         // voice --> Show the language selections
         case 1:
@@ -253,6 +243,7 @@ async function handleCallbackQuery(body) {
         // voice:English --> List the countries available for English
         case 2:
             {
+                // TODO: handle VOICE_MENU[segments[1]] returns nothing
                 const countryNames = Object.keys(VOICE_MENU[segments[1]])
                 const inlineKeyboard = [
                     [{ text: '⏪ Back', callback_data: 'voice' }],
@@ -313,17 +304,21 @@ async function handleCallbackQuery(body) {
                 const newVoice = segments[3]
                 await db.changeVoice(chatId, newVoice)
                 // https://core.telegram.org/bots/api#answercallbackquery
-                await telegram.request('answerCallbackQuery', {
-                    callback_query_id: callbackQueryId,
-                    text: `✅ Voice changed to ${newVoice}`,
-                })
+                await telegram.answerCallbackQuery(
+                    callbackQueryId,
+                    `✅ Voice changed to ${newVoice}`,
+                )
                 await telegram.deleteMessage(chatId, messageId)
             }
             return
     }
 }
 
-async function processUserMessage(user, chat, body) {
+async function processUserMessage(
+    user: db.User,
+    chat: db.Chat,
+    body: { [key: string]: any },
+) {
     // Reject messages from groups until they are deliberately supported.
     if (body.message.chat.type !== 'private') {
         console.log('rejecting non-private chat')
@@ -513,6 +508,7 @@ For example, <code>/voice en-US-AriaNeural</code>`,
         )
     } catch (err) {
         // TODO: haven't tested this.
+        //@ts-ignore
         if (err.response?.status === 429) {
             await telegram.sendMessage(
                 chatId,
@@ -537,10 +533,13 @@ For example, <code>/voice en-US-AriaNeural</code>`,
     // stream in on chat.openai.com/chat.
     //
     // Returns the full answer text when done and the messageId of the final message sent.
-    async function streamTokensToTelegram(chatId, tokenIterator) {
+    async function streamTokensToTelegram(
+        chatId: number,
+        tokenIterator: AsyncGenerator<string>,
+    ) {
         let buf = '' // Latest buffer
         let sentBuf = '' // A snapshot of the buffer that was sent so we know when it has changed.
-        let prevId
+        let prevId: number | undefined
         let isFinished = false
         // https://en.wikipedia.org/wiki/Block_Elements
         const cursor = '▍'
@@ -552,7 +551,7 @@ For example, <code>/voice en-US-AriaNeural</code>`,
             }
             if (sentBuf !== buf) {
                 sentBuf = buf
-                await telegram.editMessageText(chatId, prevId, buf + cursor)
+                await telegram.editMessageText(chatId, prevId!, buf + cursor)
             }
             setTimeout(editLoop, 1000)
         }
@@ -579,11 +578,11 @@ For example, <code>/voice en-US-AriaNeural</code>`,
         isFinished = true // Stop the send loop from continuing.
 
         // One final send, also removes the cursor.
-        await telegram.editMessageText(chatId, prevId, buf)
+        await telegram.editMessageText(chatId, prevId!, buf)
 
         return {
             answer: buf,
-            messageId: prevId,
+            messageId: prevId!,
         }
     }
 
@@ -624,7 +623,7 @@ For example, <code>/voice en-US-AriaNeural</code>`,
                 byteLength,
             ),
         ])
-        unlink(localAnswerVoicePath).catch((err) => {
+        unlink(localAnswerVoicePath).catch((err: Error) => {
             console.error(
                 `failed to delete voice at path "${localAnswerVoicePath}": ` +
                     err,
@@ -633,7 +632,7 @@ For example, <code>/voice en-US-AriaNeural</code>`,
     }
 }
 
-async function processWebhookBody(body) {
+async function processWebhookBody(body: { [key: string]: any }) {
     // First check if callback query
     if (body.callback_query) {
         await handleCallbackQuery(body)
@@ -680,21 +679,21 @@ async function processWebhookBody(body) {
 }
 
 // HACK
-function getChatId(payload) {
+function getChatId(payload: { [key: string]: any }) {
     return (
         payload.message?.chat?.id || payload.callback_query?.message?.chat?.id
     )
 }
 
 // HACK
-function getMessageId(payload) {
+function getMessageId(payload: { [key: string]: any }) {
     return (
         payload.message?.message_id ||
         payload.callback_query?.message?.message_id
     )
 }
 
-router.post('/telegram', async (ctx) => {
+router.post('/telegram', async (ctx: Koa.DefaultContext) => {
     const { body } = ctx.request
     console.log(`received webhook event. body: `, JSON.stringify(body, null, 2))
     ctx.body = 204

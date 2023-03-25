@@ -1,20 +1,34 @@
-const pg = require('pg')
-const { DATABASE_URL } = require('./config')
-const assert = require('assert')
+import pg from 'pg'
+import * as types from './types'
+import { DATABASE_URL } from './config'
+import assert from 'assert'
+
+export type User = {
+    id: number
+    uname: string
+    lang: string | undefined
+}
+
+export type Chat = {
+    id: number
+    voice: string | undefined
+    send_voice: boolean
+    temperature: number
+}
 
 // Tell pg to parse numeric column as float.
-require('pg').types.setTypeParser(1700, (val) => Number.parseFloat(val))
+pg.types.setTypeParser(1700, (val) => Number.parseFloat(val))
 
 const pool = new pg.Pool({
     connectionString: DATABASE_URL,
 })
 
-async function one(pool, stmt, params) {
+async function one(pool: pg.Pool, stmt: string, params: any[]) {
     const result = await pool.query(stmt, params)
     return result.rows[0]
 }
 
-module.exports.clearPrompts = async function (userId) {
+export async function clearPrompts(userId: number) {
     return pool.query(
         `
     delete from prompts
@@ -24,7 +38,12 @@ module.exports.clearPrompts = async function (userId) {
     )
 }
 
-module.exports.upsertUser = async function (id, uname, lang) {
+export async function upsertUser(
+    id: number,
+    uname: string,
+    lang: string | undefined,
+): Promise<User> {
+    console.log(`[upsertUser] id=${id}`)
     const user = await one(
         pool,
         `
@@ -41,7 +60,7 @@ module.exports.upsertUser = async function (id, uname, lang) {
     return user
 }
 
-module.exports.setVoiceResponse = async function (chatId, isEnabled) {
+export async function setVoiceResponse(chatId: number, isEnabled: boolean) {
     return pool.query(
         `
         update chats
@@ -52,7 +71,12 @@ module.exports.setVoiceResponse = async function (chatId, isEnabled) {
     )
 }
 
-module.exports.upsertChat = async function (id, type, uname) {
+export async function upsertChat(
+    id: number,
+    type: string,
+    uname: string,
+): Promise<Chat> {
+    console.log(`[upsertChat] id=${id}`)
     return one(
         pool,
         `insert into chats (id, type, uname)
@@ -65,7 +89,7 @@ module.exports.upsertChat = async function (id, type, uname) {
     )
 }
 
-module.exports.changeVoice = async function (chatId, voiceCode) {
+export async function changeVoice(chatId: number, voiceCode: string) {
     return one(
         pool,
         `
@@ -78,7 +102,7 @@ returning *
     )
 }
 
-module.exports.setTtsElapsed = async function (promptId, elapsed) {
+export async function setTtsElapsed(promptId: number, elapsed: number) {
     assert(Number.isInteger(promptId))
     assert(Number.isInteger(elapsed))
     return pool.query(
@@ -91,7 +115,7 @@ module.exports.setTtsElapsed = async function (promptId, elapsed) {
     )
 }
 
-module.exports.insertAnswer = async function ({
+export async function insertAnswer({
     userId,
     chatId,
     prompt,
@@ -100,6 +124,15 @@ module.exports.insertAnswer = async function ({
     promptTokens,
     answerTokens,
     gptElapsed,
+}: {
+    userId: number
+    chatId: number
+    prompt: string
+    messageId: number
+    answer: string
+    promptTokens: number
+    answerTokens: number
+    gptElapsed: number | undefined
 }) {
     return one(
         pool,
@@ -121,7 +154,7 @@ module.exports.insertAnswer = async function ({
     )
 }
 
-module.exports.setTemperature = async function (chatId, temperature) {
+export async function setTemperature(chatId: number, temperature: number) {
     assert(Number.isInteger(chatId), 'chatId must be integer')
     assert(typeof temperature === 'number', 'temperature must be number')
     return pool.query(
@@ -134,8 +167,8 @@ module.exports.setTemperature = async function (chatId, temperature) {
     )
 }
 
-module.exports.listHistory = async function (userId, chatId) {
-    const { rows } = await pool.query(
+export async function listHistory(userId: number, chatId: number) {
+    const { rows }: { rows: types.Prompt[] } = await pool.query(
         `
         select * from prompts
         where user_id = $1
@@ -152,7 +185,7 @@ module.exports.listHistory = async function (userId, chatId) {
     // and leaves 512 tokens between the user prompt (usually short in the Telegram chat setting) and
     // ChatGPT's answer.
     let budget = 4096 - 512
-    let output = []
+    let output: types.Message[] = []
     for (const row of rows) {
         if (budget - row.answer_tokens < 0) {
             break

@@ -1,6 +1,6 @@
 // Extracted from Azure's voice list:
 // https://learn.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support?tabs=tts
-const LOOKUP = {
+const LOOKUP: { [key: string]: string } = {
     'af-ZA': 'Afrikaans (South Africa)',
     'am-ET': 'Amharic (Ethiopia)',
     'ar-AE': 'Arabic (United Arab Emirates)',
@@ -151,11 +151,11 @@ const LOOKUP = {
 }
 
 // "en-US-JennyMultilingualNeural" -> "Jenny — English (United States)""
-module.exports = function prettyVoice(code) {
+export default function prettyVoice(code: string) {
     code = code.replace('MultilingualNeural', '').replace('Neural', '')
-    const name = code.match(/[a-zA-Z0-9]+$/)[0]
+    const name = code.match(/[a-zA-Z0-9]+$/)![0]
     // Handles both 'en-US' and 'zh-CN-henan'
-    const locale = code.match(/[a-z]{2}\-[A-Z]{2}(?:\-[a-z]+)?/)[0]
+    const locale = code.match(/[a-z]{2}\-[A-Z]{2}(?:\-[a-z]+)?/)![0]
     const prettyLocale = LOOKUP[locale]
     return `${name} — ${prettyLocale}`
 }

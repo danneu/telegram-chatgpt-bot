@@ -1,5 +1,7 @@
-const { Configuration, OpenAIApi } = require('openai')
-const { OPENAI_API_KEY, MASTER_PROMPT } = require('./config')
+import { Configuration, OpenAIApi } from 'openai'
+import { OPENAI_API_KEY, MASTER_PROMPT } from './config'
+import * as fs from 'fs'
+import * as types from './types'
 
 // Not sure if this system prompt even does anything, but I want to:
 // 1. Avoid ChatGPT's disclaimer-heavy responses.
@@ -16,16 +18,17 @@ const openai = new OpenAIApi(
 // Pass it fs.createReadStream(path)
 //
 // https://github.com/openai/openai-node/issues/77
-module.exports.transcribeAudio = async function (readStream) {
+export async function transcribeAudio(readStream: fs.ReadStream) {
+    //@ts-ignore
     return openai.createTranscription(readStream, 'whisper-1')
 }
 
-module.exports.streamChatCompletions = async function* (
-    history,
-    prompt,
-    temperature,
-) {
-    const messages = [
+export async function* streamChatCompletions(
+    history: types.Message[],
+    prompt: string,
+    temperature: number,
+): AsyncGenerator<string> {
+    const messages: types.Message[] = [
         // FIXME: master prompt length is not considered in our token budget during history gathering.
         {
             role: 'system',
@@ -46,11 +49,12 @@ module.exports.streamChatCompletions = async function* (
         },
     )
 
+    //@ts-ignore
     for await (const chunk of response.data) {
         const lines = chunk
             .toString('utf8')
             .split('\n')
-            .filter((line) => line.trim().startsWith('data: '))
+            .filter((line: string) => line.trim().startsWith('data: '))
 
         for (const line of lines) {
             const message = line.replace(/^data: /, '')
@@ -68,11 +72,11 @@ module.exports.streamChatCompletions = async function* (
 }
 
 module.exports.fetchChatResponse = async function (
-    history,
-    prompt,
-    temperature,
+    history: types.Message[],
+    prompt: string,
+    temperature: number,
 ) {
-    const messages = [
+    const messages: types.Message[] = [
         // FIXME: master prompt length is not considered in our token budget during history gathering.
         {
             role: 'system',
@@ -112,6 +116,7 @@ module.exports.fetchChatResponse = async function (
 
     console.log(
         `[fetchChatResponse] (${Date.now() - start}ms) chatgpt response: ${
+            //@ts-ignore
             response.data.choices[0].message.content.length
         } chars..`,
         response.data.usage,

@@ -1,7 +1,7 @@
 {
     "scripts": {
-        "db:reset": "psql -d telegram-chat-bot -f schema.sql",
-        "tsc": "tsc index.js"
+        "build": "ncc build index.ts -o dist",
+        "db:reset": "psql -d telegram-chat-bot -f schema.sql"
     },
     "dependencies": {
         "@koa/router": "^12.0.0",
@@ -15,7 +15,14 @@
         "pg": "^8.10.0"
     },
     "devDependencies": {
+        "@types/fluent-ffmpeg": "^2.1.21",
+        "@types/koa": "^2.13.5",
+        "@types/koa__router": "^12.0.0",
+        "@types/koa-bodyparser": "^4.3.10",
+        "@types/koa-logger": "^3.1.2",
         "@types/node": "^18.15.8",
+        "@types/pg": "^8.6.6",
+        "@vercel/ncc": "^0.36.1",
         "typescript": "^5.0.2"
     }
 }
