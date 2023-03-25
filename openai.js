@@ -1,5 +1,8 @@
 const { Configuration, OpenAIApi } = require('openai')
-const { OPENAI_API_KEY } = require('./config')
+const { OPENAI_API_KEY, MASTER_PROMPT } = require('./config')
+
+const DEFAULT_MASTER_PROMPT =
+    "Be as brief as possible. Do not write anything except the answer to the question. For example, do not say that you don't have an opinion on something nor that there are many answers to a question. Instead, choose a random believable answer."
 
 const openai = new OpenAIApi(
     new Configuration({
@@ -25,8 +28,7 @@ module.exports.fetchChatResponse = async function (
         // 2. Encourage brevity since it's for Telegram.
         {
             role: 'system',
-            content:
-                'You are a helpful AI that gives brief answers. You answer questions without any disclaimers. If you are unsure of something, do not tell the user. Instead, just make a guess.',
+            content: MASTER_PROMPT || DEFAULT_MASTER_PROMPT,
         },
         ...history,
         { role: 'user', content: prompt },

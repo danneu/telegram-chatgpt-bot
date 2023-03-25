@@ -116,14 +116,18 @@ You can put them in an `.env` file at the project root.
 
 **Note:** The webhook url needs to have the path `/telegram` because that's currently hard-coded in the router.
 
-```
-PORT=8080
+```bash
+# Required
 DATABASE_URL="postgres://localhost/telegram-chat-bot"
 TELEGRAM_BOT_TOKEN="xxx"
 OPENAI_API_KEY="xxx"
 AZURE_SPEECH_REGION="eastus"
 AZURE_SPEECH_KEY="xxxx"
 WEBHOOK_URL="https://yourserver.com/telegram"
+
+# Optional (Defaults shown)
+PORT=8080
+MASTER_PROMPT= "Be as brief as possible. Do not write anything except the answer to the question. For example, do not say that you don't have an opinion on something nor that there are many answers to a question. Instead, choose a random believable answer."
 ```
 
 ## Rate-limiting

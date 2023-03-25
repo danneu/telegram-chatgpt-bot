@@ -30,4 +30,5 @@ module.exports = {
     AZURE_SPEECH_KEY: process.env.AZURE_SPEECH_KEY,
     AZURE_SPEECH_REGION: process.env.AZURE_SPEECH_REGION,
     WEBHOOK_URL: process.env.WEBHOOK_URL,
+    MASTER_PROMPT: process.env.MASTER_PROMPT,
 }
