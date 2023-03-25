@@ -14,25 +14,33 @@ module.exports = class TelegramClient {
     async request(method, params) {
         const url = `https://api.telegram.org/bot${this.token}/${method}`
 
-        // console.log(`makeTelegramRequest`, {
-        //     method,
-        //     url,
-        //     params,
-        // })
+        // console.log(`makeTelegramRequest`, { method, url, params, })
 
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams(params),
-        })
+        // SLOPPY: Come up with deliberate error handling.
+        let response
+        try {
+            response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(params, null, 2),
+            })
+        } catch (err) {
+            err.response = response
+            throw err
+        }
 
         if (response.status !== 200) {
+            const err = new Error('Telegram API non-200 response')
+            err.response = response
+            const body = await response.json()
+
             console.error(
                 `Non-200 Telegram API response from ${method} ${url} ${params} -- status: ${response.status} ${response.statusText}, body: ` +
-                    JSON.stringify(await response.json(), null, 2),
+                    JSON.stringify(body, null, 2),
             )
+            throw err
         }
 
         return response
@@ -141,6 +149,14 @@ module.exports = class TelegramClient {
             )) {
             }
         }
+    }
+
+    async editMessageText(chatId, messageId, text) {
+        return this.request('editMessageText', {
+            chat_id: chatId,
+            message_id: messageId,
+            text,
+        })
     }
 
     async editMessageReplyMarkup(chatId, messageId, inlineKeyboard) {

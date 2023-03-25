@@ -487,37 +487,125 @@ For example, <code>/voice en-US-AriaNeural</code>`,
     // Fetch chatgpt completion
     const history = await db.listHistory(userId, chatId)
 
-    const { response, elapsed: gptElapsed } = await openai.fetchChatResponse(
-        history,
-        userText,
-        chat.temperature,
-    )
+    // const { response, elapsed: gptElapsed } = await openai.fetchChatResponse(
+    //     history,
+    //     userText,
+    //     chat.temperature,
+    // )
 
-    // Handle 429 Too Many Requests
-    if (response.status === 429) {
-        await telegram.sendMessage(
-            chatId,
-            `❌ Bot is rate-limited by OpenAI API. Try again soon.`,
-            messageId,
+    // // Handle 429 Too Many Requests
+    // if (response.status === 429) {
+    //     await telegram.sendMessage(
+    //         chatId,
+    //         `❌ Bot is rate-limited by OpenAI API. Try again soon.`,
+    //         messageId,
+    //     )
+    //     return
+    // }
+
+    const gptStart = Date.now()
+    let tokens
+    try {
+        tokens = await openai.streamChatCompletions(
+            history,
+            userText,
+            chat.temperature,
         )
-        return
+    } catch (err) {
+        // TODO: haven't tested this.
+        if (err.response?.status === 429) {
+            await telegram.sendMessage(
+                chatId,
+                `❌ Bot is rate-limited by OpenAI API. Try again soon.`,
+                messageId,
+            )
+            return
+        } else {
+            throw err
+        }
     }
 
+    // As chat completion tokens come streaming in from OpenAI, this function accumulates
+    // the tokens into a buffer. First it creates a new Telegram message, and every
+    // 1000ms it edits that message with the latest state of the token buffer.
+    //
+    // I chose 1000ms because I don't want to spam the Telegram API, but it means that
+    // larger chunks of text appear at a time.
+    //
+    // The goal here is for the user to not have to wait until the entire token stream
+    // is buffered before seeing the response just like how user can watch the tokens
+    // stream in on chat.openai.com/chat.
+    //
+    // Returns the full answer text when done and the messageId of the final message sent.
+    async function streamTokensToTelegram(chatId, tokenIterator) {
+        let buf = '' // Latest buffer
+        let sentBuf = '' // A snapshot of the buffer that was sent so we know when it has changed.
+        let prevId
+        let isFinished = false
+        // https://en.wikipedia.org/wiki/Block_Elements
+        const cursor = '▍'
+
+        // Call after prevId is set.
+        async function editLoop() {
+            if (isFinished) {
+                return
+            }
+            if (sentBuf !== buf) {
+                sentBuf = buf
+                await telegram.editMessageText(chatId, prevId, buf + cursor)
+            }
+            setTimeout(editLoop, 1000)
+        }
+
+        for await (const token of tokenIterator) {
+            buf += token
+            if (!prevId) {
+                prevId = await telegram
+                    .sendMessage(chatId, cursor, messageId)
+                    .then((res) => res.json())
+                    .then((body) => body.result.message_id)
+
+                // Start the edit loop after we have our first message so that at least 1000ms of tokens have
+                // accumulated.
+                setTimeout(editLoop, 1000)
+
+                // Send one more typing indicator that should cover the following edits.
+                // Too bad there's no cancelChatAction Telegram API method since the indicator
+                // might play for too long.
+                await telegram.indicateTyping(chatId)
+            }
+        }
+
+        isFinished = true // Stop the send loop from continuing.
+
+        // One final send, also removes the cursor.
+        await telegram.editMessageText(chatId, prevId, buf)
+
+        return {
+            answer: buf,
+            messageId: prevId,
+        }
+    }
+
+    const { answer, messageId: answerMessageId } = await streamTokensToTelegram(
+        chatId,
+        tokens,
+    )
+    const gptElapsed = Date.now() - gptStart
     const promptTokens = countTokens(userText)
     const prompt = await db.insertAnswer({
         userId,
         chatId,
         prompt: userText,
         promptTokens,
-        messageId,
-        answer: response.data.choices[0].message.content,
-        answerTokens: response.data.usage.completion_tokens,
+        messageId: answerMessageId,
+        answer,
+        answerTokens: countTokens(answer),
         gptElapsed,
     })
 
-    // Note, sendVoice caption text length limited to 1024 chars.
-    // sendMessage text length limited to 4096 chars.
-    // Make both handle larger messages (send a chain of messages)
+    // Send trailing voice memo.
+    await telegram.indicateTyping(chatId)
     if (chat.send_voice) {
         // Generate answer voice transcription
         const {
@@ -530,8 +618,8 @@ For example, <code>/voice en-US-AriaNeural</code>`,
             db.setTtsElapsed(prompt.id, elapsed),
             telegram.sendVoice(
                 chatId,
-                messageId,
-                prompt.answer,
+                answerMessageId,
+                '',
                 localAnswerVoicePath,
                 byteLength,
             ),
@@ -542,13 +630,6 @@ For example, <code>/voice en-US-AriaNeural</code>`,
                     err,
             )
         })
-    } else {
-        for await (const response of telegram.sendMessageChain(
-            chatId,
-            prompt.answer,
-            messageId,
-        )) {
-        }
     }
 }
 
@@ -581,7 +662,7 @@ async function processWebhookBody(body) {
     if ((inflights[user.id] || 0) >= PER_USER_CONCURRENCY) {
         telegram.sendMessage(
             chat.id,
-            '❌ Rate limited',
+            '❌ You are sending me too many simulataneous messages.',
             body.message.message_id,
         )
         return

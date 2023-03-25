@@ -20,6 +20,53 @@ module.exports.transcribeAudio = async function (readStream) {
     return openai.createTranscription(readStream, 'whisper-1')
 }
 
+module.exports.streamChatCompletions = async function* (
+    history,
+    prompt,
+    temperature,
+) {
+    const messages = [
+        // FIXME: master prompt length is not considered in our token budget during history gathering.
+        {
+            role: 'system',
+            content: MASTER_PROMPT || DEFAULT_MASTER_PROMPT,
+        },
+        ...history,
+        { role: 'user', content: prompt },
+    ]
+    const response = await openai.createChatCompletion(
+        {
+            model: 'gpt-3.5-turbo',
+            messages,
+            temperature,
+            stream: true,
+        },
+        {
+            responseType: 'stream',
+        },
+    )
+
+    for await (const chunk of response.data) {
+        const lines = chunk
+            .toString('utf8')
+            .split('\n')
+            .filter((line) => line.trim().startsWith('data: '))
+
+        for (const line of lines) {
+            const message = line.replace(/^data: /, '')
+            if (message === '[DONE]') {
+                return
+            }
+
+            const json = JSON.parse(message)
+            const token = json.choices[0].delta.content
+            if (token) {
+                yield token
+            }
+        }
+    }
+}
+
 module.exports.fetchChatResponse = async function (
     history,
     prompt,
