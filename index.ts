@@ -6,8 +6,7 @@ import * as config from './config'
 import TelegramClient from './telegram'
 import { countTokens } from './tokenizer'
 import prettyVoice from './pretty-voice'
-// third party
-import ffmpeg from 'fluent-ffmpeg'
+import { spawn } from './util'
 // server
 import Koa from 'koa'
 import Router from '@koa/router'
@@ -111,27 +110,19 @@ async function fetchOggAndConvertToMp3(
     console.log(`wrote ${localOggPath}`)
 
     // Convert .ogg -> .mp3
-    await new Promise<void>((resolve, reject) => {
-        const start = Date.now()
-        ffmpeg()
-            .input(localOggPath)
-            .save(localMp3Path)
-            .on('error', reject)
-            .on('end', () => {
-                console.log(`ogg -> mp3 time: ${Date.now() - start}ms`)
-                resolve()
-            })
-    })
+    await spawn('ffmpeg', ['-i', localOggPath, localMp3Path])
     console.log(`converted to mp3: ${localMp3Path}`)
 
     // Send .mp3 for transcription
     const result = await openai.transcribeAudio(createReadStream(localMp3Path))
+    const transcription = result.data.text
+    console.log({ transcription })
 
     // Cleanup tmp files
     unlink(localMp3Path).catch(console.error)
     unlink(localOggPath).catch(console.error)
 
-    return result.data.text
+    return transcription
 }
 
 // voice:English --> show the countries
@@ -345,11 +336,22 @@ async function processUserMessage(
         )
 
         // Send transcription to user so they know how the bot interpreted their memo.
-        await telegram.sendMessage(
-            chatId,
-            `(Transcription) <i>${userText}</i>`,
-            messageId,
-        )
+        console.log({ userText })
+        if (userText) {
+            await telegram.sendMessage(
+                chatId,
+                `(Transcription) <i>${userText}</i>`,
+                messageId,
+            )
+        } else {
+            // Transcription was empty. User didn't seem to say anything in the voice memo.
+            await telegram.sendMessage(
+                chatId,
+                `⚠️ No speech detected in this voice memo. Try again.`,
+                messageId,
+            )
+            return
+        }
 
         // We can send a new typing indicator since we just sent a message
         await telegram.indicateTyping(chatId)
