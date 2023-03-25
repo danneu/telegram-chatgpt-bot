@@ -1,6 +1,6 @@
 // Extracted from Azure's voice list:
 // https://learn.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support?tabs=tts
-const LOOKUP: { [key: string]: string } = {
+const LOCALES = {
     'af-ZA': 'Afrikaans (South Africa)',
     'am-ET': 'Amharic (Ethiopia)',
     'ar-AE': 'Arabic (United Arab Emirates)',
@@ -150,12 +150,18 @@ const LOOKUP: { [key: string]: string } = {
     'zu-ZA': 'Zulu (South Africa)',
 }
 
-// "en-US-JennyMultilingualNeural" -> "Jenny — English (United States)""
+const VOICE_REGEX =
+    /^(?<locale>[a-z]{2}-[A-Z]{2}(?:-[a-z]+)?)-(?<name>.+)(?:Multilingual)?Neural$/
+
+// Examples:
+//
+//     prettyVoice("en-US-JennyMultilingualNeural") === "Jenny — English (United States)"
+//     prettyVoice('lol') === 'Unknown'
+//     prettyVoice('xx-XX-Foo') === 'Foo (Unknown)'
+//     prettyVoice('zh-CN-henan-Foo') === 'Foo - Chinese (Zhongyuan Mandarin Henan, Simplified)'
 export default function prettyVoice(code: string) {
-    code = code.replace('MultilingualNeural', '').replace('Neural', '')
-    const name = code.match(/[a-zA-Z0-9]+$/)![0]
-    // Handles both 'en-US' and 'zh-CN-henan'
-    const locale = code.match(/[a-z]{2}\-[A-Z]{2}(?:\-[a-z]+)?/)![0]
-    const prettyLocale = LOOKUP[locale]
-    return `${name} — ${prettyLocale}`
+    const match = code.match(VOICE_REGEX)
+    if (!match) return 'Unknown'
+    const { locale, name } = match.groups
+    return `${name} - ${LOCALES[locale] || locale}`
 }

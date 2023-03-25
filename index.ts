@@ -6,7 +6,7 @@ import * as config from './config'
 import * as t from './telegram'
 import { countTokens } from './tokenizer'
 import prettyVoice from './pretty-voice'
-import { spawn } from './util'
+import * as util from './util'
 // server
 import Koa from 'koa'
 import Router from '@koa/router'
@@ -118,7 +118,7 @@ async function fetchOggAndConvertToMp3(
     console.log(`wrote ${localOggPath}`)
 
     // Convert .ogg -> .mp3
-    await spawn('ffmpeg', ['-i', localOggPath, localMp3Path])
+    await util.spawn('ffmpeg', ['-i', localOggPath, localMp3Path])
     console.log(`converted to mp3: ${localMp3Path}`)
 
     // Send .mp3 for transcription
@@ -140,17 +140,21 @@ async function fetchOggAndConvertToMp3(
 // Note: Always have an even number of voices per country.
 const VOICE_MENU: { [key: string]: any } = {
     English: {
-        Australia: {
-            Annette: 'en-AU-AnnetteNeural',
-            Darren: 'en-AU-DarrenNeural',
+        US: {
+            Jenny: 'en-US-JennyNeural',
+            Brandon: 'en-US-BrandonNeural',
         },
         UK: {
             Abbi: 'en-GB-AbbiNeural',
             Alfie: 'en-GB-AlfieNeural',
         },
-        US: {
-            Jenny: 'en-US-JennyNeural',
-            Brandon: 'en-US-BrandonNeural',
+        Australia: {
+            Annette: 'en-AU-AnnetteNeural',
+            Darren: 'en-AU-DarrenNeural',
+        },
+        Ireland: {
+            Emily: 'en-IE-EmilyNeural',
+            Connor: 'en-IE-ConnorNeural',
         },
     },
     Spanish: {
@@ -179,21 +183,17 @@ const VOICE_MENU: { [key: string]: any } = {
     },
 }
 
-function chunksOf<T>(chunkSize: number, arr: T[]) {
-    const res = []
-    for (let i = 0; i < arr.length; i += chunkSize) {
-        const chunk = arr.slice(i, i + chunkSize)
-        res.push(chunk)
-    }
-    return res
-}
-
-async function handleCallbackQuery(body: t.CallbackQuery) {
+// async function handleCallbackQuery(body: t.CallbackQuery) {
+async function handleCallbackQuery(
+    chatId: number,
+    messageId: number,
+    callbackQueryId: string,
+    callbackData: string,
+) {
     // https://core.telegram.org/bots/api#inlinekeyboardmarkup
-    const chatId = body.message.chat.id
-    const messageId = body.message.message_id
-    const callbackQueryId = body.id
-    const callbackData = body.data
+    // const chatId = body.message.chat.id
+    // const messageId = body.message.message_id
+    // const callbackData = body.data
 
     if (callbackData.startsWith('temp:')) {
         let temperature = Number.parseFloat(callbackData.split(':')[1])
@@ -218,7 +218,7 @@ async function handleCallbackQuery(body: t.CallbackQuery) {
         case 1:
             {
                 const langs = Object.keys(VOICE_MENU)
-                const inlineKeyboard = chunksOf(2, langs).map((chunk) => {
+                const inlineKeyboard = util.chunksOf(2, langs).map((chunk) => {
                     return chunk.map((lang) => {
                         return {
                             text: lang,
@@ -241,7 +241,7 @@ async function handleCallbackQuery(body: t.CallbackQuery) {
                 const inlineKeyboard = [
                     [{ text: '⏪ Back', callback_data: 'voice' }],
                 ].concat(
-                    chunksOf(2, countryNames).map((chunk) => {
+                    util.chunksOf(2, countryNames).map((chunk) => {
                         return chunk.map((countryName) => {
                             return {
                                 text: countryName,
@@ -268,17 +268,21 @@ async function handleCallbackQuery(body: t.CallbackQuery) {
                         },
                     ],
                 ].concat(
-                    chunksOf(
-                        2,
-                        Object.entries(VOICE_MENU[segments[1]][segments[2]]),
-                    ).map((chunk) => {
-                        return chunk.map(([name, code]) => {
-                            return {
-                                text: name,
-                                callback_data: `voice:${segments[1]}:${segments[2]}:${code}`,
-                            }
-                        })
-                    }),
+                    util
+                        .chunksOf(
+                            2,
+                            Object.entries(
+                                VOICE_MENU[segments[1]][segments[2]],
+                            ),
+                        )
+                        .map((chunk) => {
+                            return chunk.map(([name, code]) => {
+                                return {
+                                    text: name,
+                                    callback_data: `voice:${segments[1]}:${segments[2]}:${code}`,
+                                }
+                            })
+                        }),
                 )
 
                 // Note: I originally sent editMessageReplyMarkup and editMessage at the same time,
@@ -298,7 +302,7 @@ async function handleCallbackQuery(body: t.CallbackQuery) {
                 await db.changeVoice(chatId, newVoice)
                 // https://core.telegram.org/bots/api#answercallbackquery
                 await telegram.answerCallbackQuery(
-                    body.id,
+                    callbackQueryId,
                     `✅ Voice changed to ${newVoice}`,
                 )
                 await telegram.deleteMessage(chatId, messageId)
@@ -358,7 +362,7 @@ async function processUserMessage(
     // Check if command and short-circuit
     const command = parseCommand(message.text)
     if (command) {
-        await handleCommand(user, chat, message, command)
+        await handleCommand(user.id, chat, messageId, command)
         return
     }
 
@@ -413,6 +417,7 @@ async function processUserMessage(
     )
     const gptElapsed = Date.now() - gptStart
     const promptTokens = countTokens(userText)
+    const answerTokens = countTokens(answer)
     const prompt = await db.insertAnswer({
         userId,
         chatId,
@@ -420,7 +425,7 @@ async function processUserMessage(
         promptTokens,
         messageId: answerMessageId,
         answer,
-        answerTokens: countTokens(answer),
+        answerTokens,
         gptElapsed,
     })
 
@@ -454,7 +459,9 @@ async function processUserMessage(
 }
 
 type Command =
+    // "/info", "/ai hello"
     | { type: 'anon'; cmd: string; text: string }
+    // "/info@username", "/ai@username hello"
     | { type: 'scoped'; cmd: string; uname: string; text: string }
 
 function parseCommand(input: string): Command | undefined {
@@ -469,24 +476,20 @@ function parseCommand(input: string): Command | undefined {
     }
 }
 
-// Command starts with '/' of course.
-//
 // In a private chat, we only need to respond to naked commands like "/info"
 // In a group chat, we respond to naked commands "/info" but also scoped commands
 // "/info@god_in_a_bot" IFF it's scoped to our botUsername.
 // async function handleCommand(user: db.User, chat: db.Chat, message: t.Message) {
 async function handleCommand(
-    user: db.User,
+    userId: number,
     chat: db.Chat,
-    message: t.Message,
+    messageId: number,
     command: Command,
 ) {
-    const userId = user.id
     const chatId = chat.id
-    const messageId = message.message_id
 
     if (command.type === 'scoped' && command.uname !== botUsername) {
-        console.log('command is for someone else. ignoring...')
+        // Command is for someone else. Ignoring...
         return
     }
 
@@ -563,7 +566,7 @@ Bot info:
         const url = `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/sendMessage`
 
         const langs = Object.keys(VOICE_MENU)
-        const inlineKeyboard = chunksOf(2, langs).map((chunk) => {
+        const inlineKeyboard = util.chunksOf(2, langs).map((chunk) => {
             return chunk.map((lang) => {
                 return {
                     text: lang,
@@ -653,11 +656,7 @@ For example, <code>/voice en-US-AriaNeural</code>`,
                 path: localAnswerVoicePath,
                 byteLength,
                 elapsed,
-            } = await tts.synthesize(
-                message.message_id,
-                prompt.answer,
-                chat.voice,
-            )
+            } = await tts.synthesize(messageId, prompt.answer, chat.voice)
 
             await Promise.all([
                 db.setTtsElapsed(prompt.id, elapsed),
@@ -682,15 +681,16 @@ For example, <code>/voice en-US-AriaNeural</code>`,
     }
 }
 
+// Group message handler is really just a command handler since, for now, the bot only
+// responds to commands and not plain text.
 async function handleGroupMessage(
-    user: db.User,
+    userId: number,
     chat: db.Chat,
     message: t.Message,
 ) {
     const command = parseCommand(message.text)
     if (command) {
-        // await handleCommand(user, chat, message)
-        await handleCommand(user, chat, message, command)
+        await handleCommand(userId, chat, message.message_id, command)
         return
     }
 }
@@ -725,7 +725,7 @@ async function handleWebhookUpdate(update: t.Update) {
         if (chat.type === 'private') {
             promise = processUserMessage(user, chat, message)
         } else if (chat.type === 'group') {
-            promise = handleGroupMessage(user, chat, message)
+            promise = handleGroupMessage(user.id, chat, message)
         }
 
         await promise
@@ -746,7 +746,16 @@ async function handleWebhookUpdate(update: t.Update) {
             })
         return
     } else if ('callback_query' in update) {
-        await handleCallbackQuery(update.callback_query).catch((err) => {
+        const chatId = update.callback_query.message.chat.id
+        const messageId = update.callback_query.message.message_id
+        const callbackQueryId = update.callback_query.id
+        const callbackData = update.callback_query.data
+        await handleCallbackQuery(
+            chatId,
+            messageId,
+            callbackQueryId,
+            callbackData,
+        ).catch((err) => {
             console.error(err)
             telegram.sendMessage(
                 update.callback_query.message.chat!.id,
