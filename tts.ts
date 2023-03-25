@@ -49,7 +49,7 @@ export async function synthesize(
                 ) {
                     const readable = new PullStreamReadable(pullStream)
                     resolve({
-                        //@ts-ignore
+                        //@ts-expect-error
                         byteLength: result.privAudioData.byteLength,
                         elapsed: Date.now() - start,
                         readable,

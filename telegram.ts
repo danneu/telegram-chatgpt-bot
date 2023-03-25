@@ -168,6 +168,7 @@ export class TelegramClient {
         messageId: number,
         caption: string,
         readable: Readable,
+        // TODO: Upload without knowing byteLength.
         byteLength: number,
     ) {
         const url = `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/sendVoice`
@@ -178,11 +179,11 @@ export class TelegramClient {
         formData.append('caption', caption.slice(0, 1024))
         // Need to launder our own { stream(): <impl> } into FormData by looking like a File.
         formData.set('voice', {
-            //@ts-ignore
             [Symbol.toStringTag]: 'File',
             size: byteLength,
             name: `${chatId}-${messageId}.ogg`,
-            stream: () => readable as unknown as ReadableStream<Uint8Array>,
+            //@ts-expect-error
+            stream: () => readable,
         })
 
         const response = await fetch(url, {

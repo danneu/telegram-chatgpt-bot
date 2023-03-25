@@ -81,16 +81,8 @@ router.get('/', async (ctx) => {
     ctx.body = 'Bot is online'
 })
 
-// Downloads remote .ogg file, converts it to .mp3 locally, sends .mp3 to OpenAI API
-// to get text transcription, then deletes the local tmp files.
-async function transcribeRemoteOgg(oggUrl: string): Promise<string> {
-    console.log(`[transcribeRemoteOgg] oggUrl=${oggUrl}`)
-
-    const response = await fetch(oggUrl)
-    if (response.status !== 200) {
-        throw new Error('TODO: Handle this error')
-    }
-
+// Pipes input ogg stream into output mp3 stream which is streamed to OpenAI API for text transcription.
+async function transcribeOggStream(oggStream: Readable): Promise<string> {
     const proc = spawn('ffmpeg', [
         // input file is ogg
         '-f',
@@ -116,8 +108,7 @@ async function transcribeRemoteOgg(oggUrl: string): Promise<string> {
         console.log('proc closed', code)
     })
 
-    //@ts-expect-error
-    const sink = Readable.fromWeb(response.body).pipe(proc.stdin)
+    oggStream.pipe(proc.stdin)
     const result = await openai.transcribeAudio(proc.stdout)
 
     return result.data.text
@@ -326,7 +317,14 @@ async function processUserMessage(
         await telegram.indicateTyping(chatId)
 
         const remoteFileUrl = await telegram.getFileUrl(message.voice.file_id)
-        userText = await transcribeRemoteOgg(remoteFileUrl)
+        const response = await fetch(remoteFileUrl)
+        if (response.status !== 200) {
+            throw new Error(
+                `Error fetching telegram .ogg file. ${response.status} ${response.statusText}`,
+            )
+        }
+        //@ts-expect-error
+        userText = await transcribeOggStream(Readable.fromWeb(response.body))
 
         // Send transcription to user so they know how the bot interpreted their memo.
         if (userText) {
@@ -387,7 +385,6 @@ async function processUserMessage(
         )
     } catch (err) {
         // TODO: haven't tested this.
-        //@ts-ignore
         if (err.response?.status === 429) {
             await telegram.sendMessage(
                 chatId,
@@ -605,7 +602,6 @@ For example, <code>/voice en-US-AriaNeural</code>`,
             )
         } catch (err) {
             // TODO: haven't tested this.
-            //@ts-ignore
             if (err.response?.status === 429) {
                 await telegram.sendMessage(
                     chatId,

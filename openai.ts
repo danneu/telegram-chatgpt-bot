@@ -22,9 +22,9 @@ const openai = new OpenAIApi(
 export async function transcribeAudio(stream: Readable) {
     // Library rejects our stream unless it has path property.
     // Note: fs.createReadStream(path) has a path property which is how I figured this out.
-    //@ts-ignore
+    //@ts-expect-error
     stream.path = 'upload.mp3'
-    //@ts-ignore
+    //@ts-expect-error
     return openai.createTranscription(stream, 'whisper-1')
 }
 
@@ -54,7 +54,7 @@ export async function* streamChatCompletions(
         },
     )
 
-    //@ts-ignore
+    //@ts-expect-error
     for await (const chunk of response.data) {
         const lines = chunk
             .toString('utf8')
@@ -121,7 +121,6 @@ module.exports.fetchChatResponse = async function (
 
     console.log(
         `[fetchChatResponse] (${Date.now() - start}ms) chatgpt response: ${
-            //@ts-ignore
             response.data.choices[0].message.content.length
         } chars..`,
         response.data.usage,
