@@ -1,6 +1,5 @@
 import { CoreBPE, RankMap } from './bpe'
 import ranks from './cl100k_base.json'
-// const ranks = require('./cl100k_base.json')
 
 const special_tokens: any = {
     '<|endoftext|>': 100257,
@@ -12,7 +11,6 @@ const special_tokens: any = {
 
 const special_tokens_map = new Map<string, number>()
 for (const text of Object.keys(special_tokens)) {
-    // special_tokens_map.set(text, special_tokens_map[text])
     special_tokens_map.set(text, special_tokens_map.get(text)!)
 }
 

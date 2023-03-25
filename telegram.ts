@@ -1,5 +1,5 @@
-import fs from 'fs'
 import * as config from './config'
+import { Readable } from 'stream'
 
 // A minimal Telegram bot client that implements only the methods and options
 // that I need.
@@ -167,7 +167,7 @@ export class TelegramClient {
         chatId: number,
         messageId: number,
         caption: string,
-        localFilePath: string,
+        readable: Readable,
         byteLength: number,
     ) {
         const url = `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/sendVoice`
@@ -181,9 +181,8 @@ export class TelegramClient {
             //@ts-ignore
             [Symbol.toStringTag]: 'File',
             size: byteLength,
-            name: require('path').basename(localFilePath),
-            //@ts-ignore
-            stream: () => fs.createReadStream(localFilePath),
+            name: `${chatId}-${messageId}.ogg`,
+            stream: () => readable as unknown as ReadableStream<Uint8Array>,
         })
 
         const response = await fetch(url, {
@@ -191,7 +190,6 @@ export class TelegramClient {
             body: formData,
         })
         const responseBody = await response.json()
-        // console.log('sendVoice response', response.status, response.statusText)
 
         // Send additional message if caption was truncated (1024 chars)
         if (caption.length > 1024) {

@@ -13,13 +13,16 @@ import Router from '@koa/router'
 import logger from 'koa-logger'
 import bodyParser from 'koa-bodyparser'
 // Node
-import { createWriteStream, createReadStream } from 'fs'
+import { createWriteStream, createReadStream, read } from 'fs'
 import { unlink, readdir } from 'fs/promises'
 import { Readable } from 'stream'
 import { finished } from 'stream/promises'
 import { join } from 'path'
 
 const telegram = new t.TelegramClient(config.TELEGRAM_BOT_TOKEN)
+
+// HACK: I don't like storing this on the top level
+let botUsername = ''
 
 const PER_USER_CONCURRENCY = 3
 // Mapping of user_id to the number of requests they have in flight.
@@ -38,9 +41,6 @@ async function cleanTmpDirectory() {
     }
 }
 
-// HACK: I don't like storing this on the top level
-let botUsername = ''
-
 // TODO: Should probably mkdir -p tmp/{answer-voice,user-voice}
 async function initializeBot() {
     await cleanTmpDirectory()
@@ -57,7 +57,6 @@ async function initializeBot() {
     }
 
     botUsername = await telegram.getMe().then((x) => x.username)
-    console.log({ botUsername })
 
     await telegram.setMyCommands([
         {
@@ -101,7 +100,11 @@ router.get('/', async (ctx) => {
     ctx.body = 'Bot is online'
 })
 
-async function fetchOggAndConvertToMp3(
+// Downloads remote .ogg file, converts it to .mp3 locally, sends .mp3 to OpenAI API
+// to get text transcription, then deletes the local tmp files.
+//
+// TODO: Would be cool to pipe .ogg response to ffmpeg and then pipe ffmpeg output to API.
+async function transcribeRemoteOgg(
     oggUrl: string,
     fileId: string,
 ): Promise<string> {
@@ -333,7 +336,7 @@ async function processUserMessage(
         await telegram.indicateTyping(chatId)
 
         const remoteFileUrl = await telegram.getFileUrl(message.voice.file_id)
-        userText = await fetchOggAndConvertToMp3(
+        userText = await transcribeRemoteOgg(
             remoteFileUrl,
             message.voice.file_id,
         )
@@ -433,11 +436,11 @@ async function processUserMessage(
     await telegram.indicateTyping(chatId)
     if (chat.send_voice) {
         // Generate answer voice transcription
-        const {
-            path: localAnswerVoicePath,
-            byteLength,
-            elapsed,
-        } = await tts.synthesize(message.message_id, prompt.answer, chat.voice)
+        const { byteLength, elapsed, readable } = await tts.synthesize(
+            message.message_id,
+            prompt.answer,
+            chat.voice,
+        )
 
         await Promise.all([
             db.setTtsElapsed(prompt.id, elapsed),
@@ -445,16 +448,10 @@ async function processUserMessage(
                 chatId,
                 answerMessageId,
                 '',
-                localAnswerVoicePath,
+                readable,
                 byteLength,
             ),
         ])
-        unlink(localAnswerVoicePath).catch((err: Error) => {
-            console.error(
-                `failed to delete voice at path "${localAnswerVoicePath}": ` +
-                    err,
-            )
-        })
     }
 }
 
@@ -652,11 +649,11 @@ For example, <code>/voice en-US-AriaNeural</code>`,
         await telegram.indicateTyping(chatId)
         if (chat.send_voice) {
             // Generate answer voice transcription
-            const {
-                path: localAnswerVoicePath,
-                byteLength,
-                elapsed,
-            } = await tts.synthesize(messageId, prompt.answer, chat.voice)
+            const { byteLength, elapsed, readable } = await tts.synthesize(
+                messageId,
+                prompt.answer,
+                chat.voice,
+            )
 
             await Promise.all([
                 db.setTtsElapsed(prompt.id, elapsed),
@@ -664,16 +661,10 @@ For example, <code>/voice en-US-AriaNeural</code>`,
                     chatId,
                     answerMessageId,
                     '',
-                    localAnswerVoicePath,
+                    readable,
                     byteLength,
                 ),
             ])
-            unlink(localAnswerVoicePath).catch((err: Error) => {
-                console.error(
-                    `failed to delete voice at path "${localAnswerVoicePath}": ` +
-                        err,
-                )
-            })
         }
     } else {
         // Ignore unsupported commands. They could be intended for other bots in a group chat.

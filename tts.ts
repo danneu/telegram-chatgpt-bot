@@ -1,18 +1,17 @@
 import * as sdk from 'microsoft-cognitiveservices-speech-sdk'
 import { AZURE_SPEECH_KEY, AZURE_SPEECH_REGION } from './config'
-import { join } from 'path'
+import { Readable } from 'stream'
 
 export const DEFAULT_VOICE = 'en-US-JennyMultilingualNeural'
 
-// Returns local voice .ogg path
 export async function synthesize(
     messageId: number,
     text: string,
     voice = DEFAULT_VOICE,
 ): Promise<{
-    path: string
     elapsed: number
     byteLength: number
+    readable: Readable
 }> {
     voice = voice || DEFAULT_VOICE
     console.log(
@@ -25,16 +24,11 @@ export async function synthesize(
     )
     // TODO: Try other bitrates.
     speechConfig.speechSynthesisOutputFormat =
-        // SpeechSynthesisOutputFormat.Audio16Khz16Bit32KbpsMonoOpus
         sdk.SpeechSynthesisOutputFormat.Ogg16Khz16BitMonoOpus
-    const localOggPath = join(
-        __dirname,
-        'tmp',
-        'answer-voice',
-        messageId + '.ogg',
-    )
-    const audioConfig = sdk.AudioConfig.fromAudioFileOutput(localOggPath)
     speechConfig.speechSynthesisVoiceName = voice
+
+    const pullStream = sdk.PullAudioOutputStream.createPullStream()
+    const audioConfig = sdk.AudioConfig.fromStreamOutput(pullStream)
 
     let synthesizer = new sdk.SpeechSynthesizer(speechConfig, audioConfig)
 
@@ -42,7 +36,8 @@ export async function synthesize(
         const start = Date.now()
         synthesizer.speakTextAsync(
             text,
-            (result) => {
+            async (result) => {
+                synthesizer.close()
                 console.log(
                     `[synthesize] synthesize response received after ${
                         Date.now() - start
@@ -52,12 +47,12 @@ export async function synthesize(
                     result.reason ===
                     sdk.ResultReason.SynthesizingAudioCompleted
                 ) {
-                    // console.log(`[synthesize] result:`, result)
+                    const readable = new PullStreamReadable(pullStream)
                     resolve({
                         //@ts-ignore
                         byteLength: result.privAudioData.byteLength,
                         elapsed: Date.now() - start,
-                        path: localOggPath,
+                        readable,
                     })
                 } else {
                     reject(
@@ -68,23 +63,54 @@ export async function synthesize(
                         ),
                     )
                 }
-                synthesizer.close()
             },
             (err) => {
+                synthesizer.close()
                 console.log(
                     `[synthesize] synthesize errored received after ${
                         Date.now() - start
                     }ms`,
                 )
                 reject(err)
-                synthesizer.close()
             },
         )
     })
 }
 
-// async function run() {
-//     const result = await synthesize('xxx', 'Hola, mi nombre es Peluche.')
-//     console.log(result)
-// }
-// run().catch(console.error)
+async function readDataFromPullStream(pullStream) {
+    const data = []
+    const buffer = new ArrayBuffer(1024)
+    let bytesRead
+
+    do {
+        bytesRead = await pullStream.read(buffer)
+        if (bytesRead > 0) {
+            data.push(new Uint8Array(buffer.slice(0, bytesRead)))
+        }
+    } while (bytesRead > 0)
+
+    return new Uint8Array([].concat(...data))
+}
+
+// Wrap Azure sdk's pull stream with a Node Readable stream so we
+// can use it elsewhere, like in `fetch`.
+class PullStreamReadable extends Readable {
+    private pullStream: sdk.PullAudioOutputStream
+
+    constructor(pullStream) {
+        super()
+        this.pullStream = pullStream
+    }
+
+    async _read(size: number) {
+        const buffer = new ArrayBuffer(size)
+        const bytesRead = await this.pullStream.read(buffer)
+
+        if (bytesRead > 0) {
+            this.push(new Uint8Array(buffer.slice(0, bytesRead)))
+        } else {
+            // end of stream
+            this.push(null)
+        }
+    }
+}
