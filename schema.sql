@@ -31,6 +31,5 @@ create table prompts (
     prompt_tokens int not null,
     answer_tokens int not null,
     created_at timestamptz not null default now()
-    -- idea: delivered? t/f
 );
 
