@@ -1,5 +1,5 @@
 import pg from 'pg'
-import * as types from './types'
+// import * as types from './types'
 import { DATABASE_URL } from './config'
 import assert from 'assert'
 
@@ -29,7 +29,7 @@ export async function upsertUser(
     id: number,
     uname: string,
     lang: string | undefined,
-): Promise<types.User> {
+): Promise<User> {
     const user = await one(
         pool,
         `
@@ -61,7 +61,7 @@ export async function upsertChat(
     id: number,
     type: string,
     uname: string,
-): Promise<types.Chat> {
+): Promise<Chat> {
     return one(
         pool,
         `insert into chats (id, type, uname)
@@ -155,7 +155,7 @@ export async function setTemperature(chatId: number, temperature: number) {
 }
 
 export async function listHistory(userId: number, chatId: number) {
-    const { rows }: { rows: types.Prompt[] } = await pool.query(
+    const { rows }: { rows: Prompt[] } = await pool.query(
         `
         select * from prompts
         where user_id = $1
@@ -172,7 +172,7 @@ export async function listHistory(userId: number, chatId: number) {
     // and leaves 512 tokens between the user prompt (usually short in the Telegram chat setting) and
     // ChatGPT's answer.
     let budget = 4096 - 512
-    let output: types.Message[] = []
+    let output: Message[] = []
     for (const row of rows) {
         if (budget - row.answer_tokens < 0) {
             break
@@ -194,4 +194,34 @@ export async function listHistory(userId: number, chatId: number) {
     }
 
     return output.reverse()
+}
+
+////////////////////////////////////////////////////////////
+// DB types
+////////////////////////////////////////////////////////////
+
+export type Prompt = {
+    id: number
+    prompt: string
+    prompt_tokens: number
+    answer: string
+    answer_tokens: number
+}
+
+export type Message = {
+    role: 'system' | 'assistant' | 'user'
+    content: string
+}
+
+export type User = {
+    id: number
+    uname: string
+    lang: string | undefined
+}
+
+export type Chat = {
+    id: number
+    voice: string | undefined
+    send_voice: boolean
+    temperature: number
 }

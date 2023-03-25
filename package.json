@@ -3,7 +3,8 @@
         "build": "ncc build index.ts -o dist",
         "dev": "nodemon index.ts",
         "run": "ts-node index.ts",
-        "db:reset": "psql -d telegram-chat-bot -f schema.sql"
+        "db:reset": "psql -d telegram-chat-bot -f schema.sql",
+        "cftunnel": "cloudflared tunnel run chatdev"
     },
     "dependencies": {
         "@koa/router": "^12.0.0",

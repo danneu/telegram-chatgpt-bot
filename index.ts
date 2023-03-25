@@ -7,7 +7,6 @@ import * as t from './telegram'
 import { countTokens } from './tokenizer'
 import prettyVoice from './pretty-voice'
 import { spawn } from './util'
-import * as types from './types'
 // server
 import Koa from 'koa'
 import Router from '@koa/router'
@@ -89,7 +88,7 @@ app.use(bodyParser())
 const router = new Router()
 
 router.get('/', async (ctx) => {
-    ctx.body = 'Bot is online\n\n' + JSON.stringify(inflights, null, 2)
+    ctx.body = 'Bot is online'
 })
 
 async function fetchOggAndConvertToMp3(
@@ -100,7 +99,6 @@ async function fetchOggAndConvertToMp3(
     const localMp3Path = join(__dirname, 'tmp', 'user-voice', fileId + '.mp3')
 
     const response = await fetch(oggUrl)
-    const body = response.body!
     if (response.status !== 200) {
         throw new Error('TODO: Handle this error')
     }
@@ -305,8 +303,8 @@ async function handleCallbackQuery(body: t.CallbackQuery) {
 }
 
 async function processUserMessage(
-    user: types.User,
-    chat: types.Chat,
+    user: db.User,
+    chat: db.Chat,
     message: t.Message,
 ) {
     // Reject messages from groups until they are deliberately supported.

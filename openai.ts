@@ -1,7 +1,7 @@
 import { Configuration, OpenAIApi } from 'openai'
 import { OPENAI_API_KEY, MASTER_PROMPT } from './config'
 import * as fs from 'fs'
-import * as types from './types'
+import * as db from './db'
 
 // Not sure if this system prompt even does anything, but I want to:
 // 1. Avoid ChatGPT's disclaimer-heavy responses.
@@ -24,11 +24,11 @@ export async function transcribeAudio(readStream: fs.ReadStream) {
 }
 
 export async function* streamChatCompletions(
-    history: types.Message[],
+    history: db.Message[],
     prompt: string,
     temperature: number,
 ): AsyncGenerator<string> {
-    const messages: types.Message[] = [
+    const messages: db.Message[] = [
         // FIXME: master prompt length is not considered in our token budget during history gathering.
         {
             role: 'system',
@@ -72,11 +72,11 @@ export async function* streamChatCompletions(
 }
 
 module.exports.fetchChatResponse = async function (
-    history: types.Message[],
+    history: db.Message[],
     prompt: string,
     temperature: number,
 ) {
-    const messages: types.Message[] = [
+    const messages: db.Message[] = [
         // FIXME: master prompt length is not considered in our token budget during history gathering.
         {
             role: 'system',
