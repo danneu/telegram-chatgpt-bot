@@ -154,17 +154,17 @@ export async function setTemperature(chatId: number, temperature: number) {
     )
 }
 
-export async function listHistory(userId: number, chatId: number) {
+// export async function listHistory(userId: number, chatId: number) {
+export async function listHistory(chatId: number) {
     const { rows }: { rows: Prompt[] } = await pool.query(
         `
         select * from prompts
-        where user_id = $1
-          and chat_id = $2
+        where chat_id = $1
           and length(prompt) > 0
         order by id desc
         limit 20
     `,
-        [userId, chatId],
+        [chatId],
     )
 
     // The token budget of 4096 is a sum of historical message tokens + user prompt + ChatGPT answer.
@@ -221,6 +221,7 @@ export type User = {
 
 export type Chat = {
     id: number
+    type: 'private' | 'group' | 'supergroup' | 'channel'
     voice: string | undefined
     send_voice: boolean
     temperature: number

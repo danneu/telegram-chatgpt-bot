@@ -38,13 +38,22 @@ export class TelegramClient {
             const body = await response.json()
 
             console.error(
-                `Non-200 Telegram API response from ${method} ${url} ${params} -- status: ${response.status} ${response.statusText}, body: ` +
-                    JSON.stringify(body, null, 2),
+                `Non-200 Telegram API response from ${method} ${url} ${JSON.stringify(
+                    params,
+                )} -- status: ${response.status} ${
+                    response.statusText
+                }, body: ` + JSON.stringify(body, null, 2),
             )
             throw err
         }
 
         return response
+    }
+
+    async getMe() {
+        return this.request('getMe')
+            .then((x) => x.json())
+            .then((x) => x.result as User)
     }
 
     async setMyCommands(commands: { command: string; description: string }[]) {
@@ -209,6 +218,9 @@ export class TelegramClient {
         messageId: number,
         inlineKeyboard: { [key: string]: any },
     ) {
+        console.log(
+            `[editMessageReplyMarkup] chatId=${chatId} messageId=${messageId}`,
+        )
         return this.request('editMessageReplyMarkup', {
             chat_id: chatId,
             message_id: messageId,
@@ -231,6 +243,9 @@ function* stringChunksOf(length: number, text: string) {
 
 ////////////////////////////////////////////////////////////
 // Telegram API types
+//
+// I don't want to go overboard here. These should only be the types that
+// my bot needs so I don't have to keep looking at docs.
 ////////////////////////////////////////////////////////////
 
 // https://core.telegram.org/bots/api#update

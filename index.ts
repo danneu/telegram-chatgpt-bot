@@ -38,6 +38,9 @@ async function cleanTmpDirectory() {
     }
 }
 
+// HACK: I don't like storing this on the top level
+let botUsername = ''
+
 // TODO: Should probably mkdir -p tmp/{answer-voice,user-voice}
 async function initializeBot() {
     await cleanTmpDirectory()
@@ -52,6 +55,9 @@ async function initializeBot() {
             // allowed_updates: ['message'],
         })
     }
+
+    botUsername = await telegram.getMe().then((x) => x.username)
+    console.log({ botUsername })
 
     await telegram.setMyCommands([
         {
@@ -74,6 +80,10 @@ async function initializeBot() {
         {
             command: 'clear',
             description: 'reset chat context',
+        },
+        {
+            command: 'ai',
+            description: 'send message to bot (only needed in group chat)',
         },
     ])
 }
@@ -180,7 +190,7 @@ function chunksOf<T>(chunkSize: number, arr: T[]) {
 
 async function handleCallbackQuery(body: t.CallbackQuery) {
     // https://core.telegram.org/bots/api#inlinekeyboardmarkup
-    const chatId = body.from.id
+    const chatId = body.message.chat.id
     const messageId = body.message.message_id
     const callbackQueryId = body.id
     const callbackData = body.data
@@ -196,11 +206,6 @@ async function handleCallbackQuery(body: t.CallbackQuery) {
             chatId,
             `🌡️ Temperature changed to ${temperature.toFixed(1)}`,
         )
-        // await telegram.request('answerCallbackQuery', {
-        //     callback_query_id: callbackQueryId,
-        //     text: `✅ Temperature changed to ${temperature.toFixed(1)}`,
-        // })
-        // await telegram.deleteMessage(chatId, messageId)
         return
     }
 
@@ -318,9 +323,8 @@ async function processUserMessage(
     const messageId = message.message_id
     let userText = message.text
 
-    // Basic check to prevent too many in-flight requests per user.
-
     // Check if voice and transcribe it
+    // Only possible in private chats
     if (message.voice) {
         await telegram.indicateTyping(chatId)
 
@@ -351,132 +355,17 @@ async function processUserMessage(
         await telegram.indicateTyping(chatId)
     }
 
-    // TODO: If added to a group and user uses menu to select /setvoice, telegram sends
-    // message "/getvoice@dev_god_in_a_bot" to disambiguate between other commands, so we
-    // need to handle that.
-
     // Check if command and short-circuit
-    if (userText === '/start') {
-        await telegram.indicateTyping(chatId)
-        return telegram.sendMessage(
-            chatId,
-            `Hello! I'm an AI chat bot powered by ChatGPT. Go ahead and ask me something.\n\nI respond in English by default. Use /setvoice to use a different language.`,
-        )
-    } else if (userText === '/clear') {
-        await telegram.indicateTyping(chatId)
-        await db.clearPrompts(chatId)
-        await telegram.sendMessage(chatId, 'Context cleared.', messageId)
-        return
-    } else if (userText === '/info') {
-        await telegram.sendMessage(
-            chatId,
-            `
-Bot info:
-
-- Voice: ${prettyVoice(chat.voice || tts.DEFAULT_VOICE)} 
-- Voice responses: ${chat.send_voice ? '🔊 On' : '🔇 Off'}
-- Temperature: ${chat.temperature.toFixed(1)}
-        `.trim(),
-            messageId,
-        )
-        return
-    } else if (userText === '/voiceon') {
-        await Promise.all([
-            telegram.indicateTyping(chatId),
-            db.setVoiceResponse(chatId, true),
-        ])
-        await telegram.sendMessage(
-            chatId,
-            '🔊 Bot voice responses enabled.',
-            messageId,
-        )
-        return
-    } else if (userText === '/voiceoff') {
-        await Promise.all([
-            telegram.indicateTyping(chatId),
-            db.setVoiceResponse(chatId, false),
-        ])
-        await telegram.sendMessage(
-            chatId,
-            '🔇 Bot voice responses disabled.',
-            messageId,
-        )
-        return
-    } else if (userText === '/temp') {
-        await telegram.indicateTyping(chatId)
-        await telegram.request('sendMessage', {
-            chat_id: chatId,
-            text: `Select temperature from less random (0.0) to more random (1.0).\n\nCurrent: ${chat.temperature.toFixed(
-                1,
-            )} (default: 0.8)`,
-            reply_markup: JSON.stringify({
-                inline_keyboard: [
-                    [
-                        { text: '0.0', callback_data: `temp:0.0` },
-                        { text: '0.2', callback_data: 'temp:0.2' },
-                        { text: '0.4', callback_data: 'temp:0.4' },
-                        { text: '0.6', callback_data: 'temp:0.6' },
-                        { text: '0.8', callback_data: 'temp:0.8' },
-                        { text: '1.0', callback_data: 'temp:1.0' },
-                    ],
-                ],
-            }),
-        })
-        return
-    } else if (userText === '/setvoice') {
-        await telegram.indicateTyping(chatId)
-        const url = `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/sendMessage`
-
-        const langs = Object.keys(VOICE_MENU)
-        const inlineKeyboard = chunksOf(2, langs).map((chunk) => {
-            return chunk.map((lang) => {
-                return {
-                    text: lang,
-                    callback_data: `voice:${lang}`,
-                }
-            })
-        })
-        const response = await telegram.request('sendMessage', {
-            chat_id: chatId,
-            text: `Select a voice/language for the bot's text-to-speech voice memos.`,
-            reply_markup: JSON.stringify({
-                inline_keyboard: inlineKeyboard,
-            }),
-        })
-        console.log(
-            `POST ${url} -> ${response.status} ${await response.text()}`,
-        )
-        return
-    } else if (userText === '/voices') {
-        await telegram.indicateTyping(chatId)
-        await telegram.sendMessage(
-            chatId,
-            `Choose one of the voices on the "Text-to-speech" tab <a href="https://learn.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support?tabs=tts">here</a>. 
-            
-For example, <code>/voice en-US-AriaNeural</code>`,
-        )
-        return
-    } else if (userText.startsWith('/voice ')) {
-        await telegram.indicateTyping(chatId)
-        const voiceCode = userText.split(/\ +/)[1]
-        if (/[a-z]{2}\-[A-Z]{2}-[a-zA-Z0-0]+/.test(voiceCode)) {
-            await db.changeVoice(chatId, voiceCode)
-        } else {
-            await telegram.sendMessage(
-                chatId,
-                'The voice name should look something like "en-US-AmberNeural" or "es-MX-CandelaNeural".',
-            )
-        }
-        return
-    } else if (userText.startsWith('/')) {
-        // Ignore unsupported commands. They could be intended for other bots in a group chat.
+    const command = parseCommand(message.text)
+    if (command) {
+        await handleCommand(user, chat, message, command)
         return
     }
 
     await telegram.indicateTyping(chatId)
 
     // Fetch chatgpt completion
-    const history = await db.listHistory(userId, chatId)
+    const history = await db.listHistory(chatId)
 
     // const { response, elapsed: gptElapsed } = await openai.fetchChatResponse(
     //     history,
@@ -517,67 +406,9 @@ For example, <code>/voice en-US-AriaNeural</code>`,
         }
     }
 
-    // As chat completion tokens come streaming in from OpenAI, this function accumulates
-    // the tokens into a buffer. First it creates a new Telegram message, and every
-    // 1000ms it edits that message with the latest state of the token buffer.
-    //
-    // I chose 1000ms because I don't want to spam the Telegram API, but it means that
-    // larger chunks of text appear at a time.
-    //
-    // The goal here is for the user to not have to wait until the entire token stream
-    // is buffered before seeing the response just like how user can watch the tokens
-    // stream in on chat.openai.com/chat.
-    //
-    // Returns the full answer text when done and the messageId of the final message sent.
-    async function streamTokensToTelegram(
-        chatId: number,
-        tokenIterator: AsyncGenerator<string>,
-    ) {
-        let buf = '' // Latest buffer
-        let sentBuf = '' // A snapshot of the buffer that was sent so we know when it has changed.
-        let prevId: number | undefined
-        let isFinished = false
-        // https://en.wikipedia.org/wiki/Block_Elements
-        const cursor = '▍'
-
-        // Call after prevId is set.
-        async function editLoop() {
-            if (isFinished) {
-                return
-            }
-            if (sentBuf !== buf) {
-                sentBuf = buf
-                await telegram.editMessageText(chatId, prevId!, buf + cursor)
-            }
-            setTimeout(editLoop, 1000)
-        }
-
-        for await (const token of tokenIterator) {
-            buf += token
-            if (!prevId) {
-                prevId = await telegram
-                    .sendMessage(chatId, cursor, messageId)
-                    .then((msg) => msg.message_id)
-
-                // Start the edit loop after we have our first message so that at least 1000ms of tokens have
-                // accumulated.
-                setTimeout(editLoop, 1000)
-            }
-        }
-
-        isFinished = true // Stop the send loop from continuing.
-
-        // One final send, also removes the cursor.
-        await telegram.editMessageText(chatId, prevId!, buf)
-
-        return {
-            answer: buf,
-            messageId: prevId!,
-        }
-    }
-
     const { answer, messageId: answerMessageId } = await streamTokensToTelegram(
         chatId,
+        messageId,
         tokens,
     )
     const gptElapsed = Date.now() - gptStart
@@ -622,6 +453,248 @@ For example, <code>/voice en-US-AriaNeural</code>`,
     }
 }
 
+type Command =
+    | { type: 'anon'; cmd: string; text: string }
+    | { type: 'scoped'; cmd: string; uname: string; text: string }
+
+function parseCommand(input: string): Command | undefined {
+    const re = /^(\/[a-zA-Z0-9]+)(?:@([a-zA-Z0-9_]+))?(?:[ ]+(.*))?$/
+    const match = input.trim().match(re)
+    if (!match) return
+    const [_, cmd, uname, text] = match
+    if (uname) {
+        return { type: 'scoped', uname, cmd, text: text || '' }
+    } else {
+        return { type: 'anon', cmd, text: text || '' }
+    }
+}
+
+// Command starts with '/' of course.
+//
+// In a private chat, we only need to respond to naked commands like "/info"
+// In a group chat, we respond to naked commands "/info" but also scoped commands
+// "/info@god_in_a_bot" IFF it's scoped to our botUsername.
+// async function handleCommand(user: db.User, chat: db.Chat, message: t.Message) {
+async function handleCommand(
+    user: db.User,
+    chat: db.Chat,
+    message: t.Message,
+    command: Command,
+) {
+    const userId = user.id
+    const chatId = chat.id
+    const messageId = message.message_id
+
+    if (command.type === 'scoped' && command.uname !== botUsername) {
+        console.log('command is for someone else. ignoring...')
+        return
+    }
+
+    // Check if command and short-circuit
+    if (command.cmd === '/start') {
+        await telegram.indicateTyping(chatId)
+        return telegram.sendMessage(
+            chatId,
+            `Hello! I'm an AI chat bot powered by ChatGPT. Go ahead and ask me something.\n\nI respond in English by default. Use /setvoice to use a different language.`,
+        )
+    } else if (command.cmd === '/clear') {
+        await telegram.indicateTyping(chatId)
+        await db.clearPrompts(chatId)
+        await telegram.sendMessage(chatId, 'Context cleared.', messageId)
+        return
+    } else if (command.cmd === '/info') {
+        await telegram.sendMessage(
+            chatId,
+            `
+Bot info:
+
+- Voice: ${prettyVoice(chat.voice || tts.DEFAULT_VOICE)} 
+- Voice responses: ${chat.send_voice ? '🔊 On' : '🔇 Off'}
+- Temperature: ${chat.temperature.toFixed(1)}
+        `.trim(),
+            messageId,
+        )
+        return
+    } else if (command.cmd === '/voiceon') {
+        await Promise.all([
+            telegram.indicateTyping(chatId),
+            db.setVoiceResponse(chatId, true),
+        ])
+        await telegram.sendMessage(
+            chatId,
+            '🔊 Bot voice responses enabled.',
+            messageId,
+        )
+        return
+    } else if (command.cmd === '/voiceoff') {
+        await Promise.all([
+            telegram.indicateTyping(chatId),
+            db.setVoiceResponse(chatId, false),
+        ])
+        await telegram.sendMessage(
+            chatId,
+            '🔇 Bot voice responses disabled.',
+            messageId,
+        )
+        return
+    } else if (command.cmd === '/temp') {
+        await telegram.indicateTyping(chatId)
+        await telegram.request('sendMessage', {
+            chat_id: chatId,
+            text: `Select temperature from less random (0.0) to more random (1.0).\n\nCurrent: ${chat.temperature.toFixed(
+                1,
+            )} (default: 0.8)`,
+            reply_markup: JSON.stringify({
+                inline_keyboard: [
+                    [
+                        { text: '0.0', callback_data: `temp:0.0` },
+                        { text: '0.2', callback_data: 'temp:0.2' },
+                        { text: '0.4', callback_data: 'temp:0.4' },
+                        { text: '0.6', callback_data: 'temp:0.6' },
+                        { text: '0.8', callback_data: 'temp:0.8' },
+                        { text: '1.0', callback_data: 'temp:1.0' },
+                    ],
+                ],
+            }),
+        })
+        return
+    } else if (command.cmd === '/setvoice') {
+        await telegram.indicateTyping(chatId)
+        const url = `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/sendMessage`
+
+        const langs = Object.keys(VOICE_MENU)
+        const inlineKeyboard = chunksOf(2, langs).map((chunk) => {
+            return chunk.map((lang) => {
+                return {
+                    text: lang,
+                    callback_data: `voice:${lang}`,
+                }
+            })
+        })
+        const response = await telegram.request('sendMessage', {
+            chat_id: chatId,
+            text: `Select a voice/language for the bot's text-to-speech voice memos.`,
+            reply_markup: JSON.stringify({
+                inline_keyboard: inlineKeyboard,
+            }),
+        })
+        console.log(
+            `POST ${url} -> ${response.status} ${await response.text()}`,
+        )
+        return
+    } else if (command.cmd === '/voices') {
+        await telegram.indicateTyping(chatId)
+        await telegram.sendMessage(
+            chatId,
+            `Choose one of the voices on the "Text-to-speech" tab <a href="https://learn.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support?tabs=tts">here</a>. 
+            
+For example, <code>/voice en-US-AriaNeural</code>`,
+        )
+        return
+    } else if (command.cmd === '/voice' && command.text) {
+        await telegram.indicateTyping(chatId)
+        const voiceCode = command.text
+        if (/[a-z]{2}\-[A-Z]{2}-[a-zA-Z0-0]+/.test(voiceCode)) {
+            await db.changeVoice(chatId, voiceCode)
+        } else {
+            await telegram.sendMessage(
+                chatId,
+                'The voice name should look something like "en-US-AmberNeural" or "es-MX-CandelaNeural".',
+            )
+        }
+        return
+    } else if (command.cmd === '/ai' && command.text) {
+        await telegram.indicateTyping(chatId)
+        // TODO: For group chats, consider chat history from all users, not just from userId
+        const history = await db.listHistory(chatId)
+        const gptStart = Date.now()
+        let tokens
+        try {
+            tokens = await openai.streamChatCompletions(
+                history,
+                command.text,
+                chat.temperature,
+            )
+        } catch (err) {
+            // TODO: haven't tested this.
+            //@ts-ignore
+            if (err.response?.status === 429) {
+                await telegram.sendMessage(
+                    chatId,
+                    `❌ Bot is rate-limited by OpenAI API. Try again soon.`,
+                    messageId,
+                )
+                return
+            } else {
+                throw err
+            }
+        }
+
+        const { answer, messageId: answerMessageId } =
+            await streamTokensToTelegram(chatId, messageId, tokens)
+        const gptElapsed = Date.now() - gptStart
+        const promptTokens = countTokens(command.text)
+        const prompt = await db.insertAnswer({
+            userId,
+            chatId,
+            prompt: command.text,
+            promptTokens,
+            messageId: answerMessageId,
+            answer,
+            answerTokens: countTokens(answer),
+            gptElapsed,
+        })
+
+        // Send trailing voice memo.
+        await telegram.indicateTyping(chatId)
+        if (chat.send_voice) {
+            // Generate answer voice transcription
+            const {
+                path: localAnswerVoicePath,
+                byteLength,
+                elapsed,
+            } = await tts.synthesize(
+                message.message_id,
+                prompt.answer,
+                chat.voice,
+            )
+
+            await Promise.all([
+                db.setTtsElapsed(prompt.id, elapsed),
+                telegram.sendVoice(
+                    chatId,
+                    answerMessageId,
+                    '',
+                    localAnswerVoicePath,
+                    byteLength,
+                ),
+            ])
+            unlink(localAnswerVoicePath).catch((err: Error) => {
+                console.error(
+                    `failed to delete voice at path "${localAnswerVoicePath}": ` +
+                        err,
+                )
+            })
+        }
+    } else {
+        // Ignore unsupported commands. They could be intended for other bots in a group chat.
+        return
+    }
+}
+
+async function handleGroupMessage(
+    user: db.User,
+    chat: db.Chat,
+    message: t.Message,
+) {
+    const command = parseCommand(message.text)
+    if (command) {
+        // await handleCommand(user, chat, message)
+        await handleCommand(user, chat, message, command)
+        return
+    }
+}
+
 async function handleWebhookUpdate(update: t.Update) {
     if ('message' in update) {
         const message = update.message
@@ -635,6 +708,7 @@ async function handleWebhookUpdate(update: t.Update) {
             message.chat!.type,
             message.chat!.username,
         )
+        console.log('session', { user, chat })
         if ((inflights[user.id] || 0) >= PER_USER_CONCURRENCY) {
             telegram.sendMessage(
                 chat.id,
@@ -645,7 +719,16 @@ async function handleWebhookUpdate(update: t.Update) {
         } else {
             inflights[user.id] = (inflights[user.id] || 0) + 1
         }
-        await processUserMessage(user, chat, message)
+
+        // We handle private chats and group chats here.
+        let promise
+        if (chat.type === 'private') {
+            promise = processUserMessage(user, chat, message)
+        } else if (chat.type === 'group') {
+            promise = handleGroupMessage(user, chat, message)
+        }
+
+        await promise
             .catch((err) => {
                 console.error(err)
                 telegram.sendMessage(
@@ -697,3 +780,63 @@ initializeBot()
         })
     })
     .catch(console.error)
+
+// As chat completion tokens come streaming in from OpenAI, this function accumulates
+// the tokens into a buffer. First it creates a new Telegram message, and every
+// 1000ms it edits that message with the latest state of the token buffer.
+//
+// I chose 1000ms because I don't want to spam the Telegram API, but it means that
+// larger chunks of text appear at a time.
+//
+// The goal here is for the user to not have to wait until the entire token stream
+// is buffered before seeing the response just like how user can watch the tokens
+// stream in on chat.openai.com/chat.
+//
+// Returns the full answer text when done and the messageId of the final message sent.
+async function streamTokensToTelegram(
+    chatId: number,
+    initMessageId: number,
+    tokenIterator: AsyncGenerator<string>,
+) {
+    let buf = '' // Latest buffer
+    let sentBuf = '' // A snapshot of the buffer that was sent so we know when it has changed.
+    let prevId: number | undefined
+    let isFinished = false
+    // https://en.wikipedia.org/wiki/Block_Elements
+    const cursor = '▍'
+
+    // Call after prevId is set.
+    async function editLoop() {
+        if (isFinished) {
+            return
+        }
+        if (sentBuf !== buf) {
+            sentBuf = buf
+            await telegram.editMessageText(chatId, prevId!, buf + cursor)
+        }
+        setTimeout(editLoop, 1000)
+    }
+
+    for await (const token of tokenIterator) {
+        buf += token
+        if (!prevId) {
+            prevId = await telegram
+                .sendMessage(chatId, cursor, initMessageId)
+                .then((msg) => msg.message_id)
+
+            // Start the edit loop after we have our first message so that at least 1000ms of tokens have
+            // accumulated.
+            setTimeout(editLoop, 1000)
+        }
+    }
+
+    isFinished = true // Stop the send loop from continuing.
+
+    // One final send, also removes the cursor.
+    await telegram.editMessageText(chatId, prevId!, buf)
+
+    return {
+        answer: buf,
+        messageId: prevId!,
+    }
+}
