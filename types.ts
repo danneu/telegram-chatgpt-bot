@@ -1,3 +1,4 @@
+// TODO: Move to db.ts so these can be db.User, db.Prompt types.
 export type Prompt = {
     id: number
     prompt: string

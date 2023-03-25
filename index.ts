@@ -3,7 +3,7 @@ import * as openai from './openai'
 import * as db from './db'
 import * as tts from './tts'
 import * as config from './config'
-import TelegramClient from './telegram'
+import * as t from './telegram'
 import { countTokens } from './tokenizer'
 import prettyVoice from './pretty-voice'
 import { spawn } from './util'
@@ -14,14 +14,13 @@ import Router from '@koa/router'
 import logger from 'koa-logger'
 import bodyParser from 'koa-bodyparser'
 // Node
-import assert from 'assert'
 import { createWriteStream, createReadStream } from 'fs'
 import { unlink, readdir } from 'fs/promises'
 import { Readable } from 'stream'
 import { finished } from 'stream/promises'
 import { join } from 'path'
 
-const telegram = new TelegramClient(config.TELEGRAM_BOT_TOKEN)
+const telegram = new t.TelegramClient(config.TELEGRAM_BOT_TOKEN)
 
 const PER_USER_CONCURRENCY = 3
 // Mapping of user_id to the number of requests they have in flight.
@@ -90,7 +89,7 @@ app.use(bodyParser())
 const router = new Router()
 
 router.get('/', async (ctx) => {
-    ctx.body = 'Bot is online'
+    ctx.body = 'Bot is online\n\n' + JSON.stringify(inflights, null, 2)
 })
 
 async function fetchOggAndConvertToMp3(
@@ -181,12 +180,12 @@ function chunksOf<T>(chunkSize: number, arr: T[]) {
     return res
 }
 
-async function handleCallbackQuery(body: { [key: string]: any }) {
+async function handleCallbackQuery(body: t.CallbackQuery) {
     // https://core.telegram.org/bots/api#inlinekeyboardmarkup
-    const chatId = body.callback_query.from.id
-    const messageId = body.callback_query.message.message_id
-    const callbackQueryId = body.callback_query.id
-    const callbackData = body.callback_query.data
+    const chatId = body.from.id
+    const messageId = body.message.message_id
+    const callbackQueryId = body.id
+    const callbackData = body.data
 
     if (callbackData.startsWith('temp:')) {
         let temperature = Number.parseFloat(callbackData.split(':')[1])
@@ -296,7 +295,7 @@ async function handleCallbackQuery(body: { [key: string]: any }) {
                 await db.changeVoice(chatId, newVoice)
                 // https://core.telegram.org/bots/api#answercallbackquery
                 await telegram.answerCallbackQuery(
-                    callbackQueryId,
+                    body.id,
                     `✅ Voice changed to ${newVoice}`,
                 )
                 await telegram.deleteMessage(chatId, messageId)
@@ -308,31 +307,29 @@ async function handleCallbackQuery(body: { [key: string]: any }) {
 async function processUserMessage(
     user: types.User,
     chat: types.Chat,
-    body: { [key: string]: any },
+    message: t.Message,
 ) {
     // Reject messages from groups until they are deliberately supported.
-    if (body.message.chat.type !== 'private') {
+    if (message.chat.type !== 'private') {
         console.log('rejecting non-private chat')
         return
     }
 
-    const userId = body.message.from.id
-    const chatId = body.message.chat.id
-    const messageId = body.message.message_id
-    let userText = body.message.text
+    const userId = message.from.id
+    const chatId = message.chat.id
+    const messageId = message.message_id
+    let userText = message.text
 
     // Basic check to prevent too many in-flight requests per user.
 
     // Check if voice and transcribe it
-    if (body.message.voice) {
+    if (message.voice) {
         await telegram.indicateTyping(chatId)
 
-        const remoteFileUrl = await telegram.getFileUrl(
-            body.message.voice.file_id,
-        )
+        const remoteFileUrl = await telegram.getFileUrl(message.voice.file_id)
         userText = await fetchOggAndConvertToMp3(
             remoteFileUrl,
-            body.message.voice.file_id,
+            message.voice.file_id,
         )
 
         // Send transcription to user so they know how the bot interpreted their memo.
@@ -562,8 +559,7 @@ For example, <code>/voice en-US-AriaNeural</code>`,
             if (!prevId) {
                 prevId = await telegram
                     .sendMessage(chatId, cursor, messageId)
-                    .then((res) => res.json())
-                    .then((body) => body.result.message_id)
+                    .then((msg) => msg.message_id)
 
                 // Start the edit loop after we have our first message so that at least 1000ms of tokens have
                 // accumulated.
@@ -612,7 +608,7 @@ For example, <code>/voice en-US-AriaNeural</code>`,
             path: localAnswerVoicePath,
             byteLength,
             elapsed,
-        } = await tts.synthesize(body.update_id, prompt.answer, chat.voice)
+        } = await tts.synthesize(message.message_id, prompt.answer, chat.voice)
 
         await Promise.all([
             db.setTtsElapsed(prompt.id, elapsed),
@@ -633,83 +629,69 @@ For example, <code>/voice en-US-AriaNeural</code>`,
     }
 }
 
-async function processWebhookBody(body: { [key: string]: any }) {
-    // First check if callback query
-    if (body.callback_query) {
-        await handleCallbackQuery(body)
-        return
-    }
-
-    // FIXME: Else, assume it's message query for now (sloppy)
-    assert(body.message, 'update should be a message type at this point')
-
-    // The person sending the message
-    const user = await db.upsertUser(
-        body.message.from.id,
-        body.message.from.username,
-        body.message.from.language_code,
-    )
-    // The chat in which the user sent the message
-    const chat = await db.upsertChat(
-        body.message.chat.id,
-        body.message.chat.type,
-        body.message.chat.username,
-    )
-
-    // const session = { user, chat }
-    console.log({ user, chat })
-
-    if ((inflights[user.id] || 0) >= PER_USER_CONCURRENCY) {
-        telegram.sendMessage(
-            chat.id,
-            '❌ You are sending me too many simulataneous messages.',
-            body.message.message_id,
+async function handleWebhookUpdate(update: t.Update) {
+    if ('message' in update) {
+        const message = update.message
+        const user = await db.upsertUser(
+            message.from.id,
+            message.from.username,
+            message.from.language_code,
         )
+        const chat = await db.upsertChat(
+            message.chat!.id,
+            message.chat!.type,
+            message.chat!.username,
+        )
+        if ((inflights[user.id] || 0) >= PER_USER_CONCURRENCY) {
+            telegram.sendMessage(
+                chat.id,
+                '❌ You are sending me too many simulataneous messages.',
+                message.message_id,
+            )
+            return
+        } else {
+            inflights[user.id] = (inflights[user.id] || 0) + 1
+        }
+        await processUserMessage(user, chat, message)
+            .catch((err) => {
+                console.error(err)
+                telegram.sendMessage(
+                    chat.id,
+                    '❌ Something went wrong and the bot could not respond to your message. Try again soon?',
+                    message.message_id,
+                )
+            })
+            .finally(() => {
+                if (inflights[user.id] <= 1) {
+                    delete inflights[user.id]
+                } else {
+                    inflights[user.id] -= 1
+                }
+            })
+        return
+    } else if ('callback_query' in update) {
+        await handleCallbackQuery(update.callback_query).catch((err) => {
+            console.error(err)
+            telegram.sendMessage(
+                update.callback_query.message.chat!.id,
+                '❌ Something went wrong and the bot could not respond to your message. Try again soon?',
+                update.callback_query.message!.message_id,
+            )
+        })
         return
     } else {
-        inflights[user.id] = (inflights[user.id] || 0) + 1
+        console.log('unhandled webhook update:', update)
+        return
     }
-
-    return processUserMessage(user, chat, body).finally(() => {
-        if (inflights[user.id] <= 1) {
-            delete inflights[user.id]
-        } else {
-            inflights[user.id] -= 1
-        }
-    })
-}
-
-// HACK
-function getChatId(payload: { [key: string]: any }) {
-    return (
-        payload.message?.chat?.id || payload.callback_query?.message?.chat?.id
-    )
-}
-
-// HACK
-function getMessageId(payload: { [key: string]: any }) {
-    return (
-        payload.message?.message_id ||
-        payload.callback_query?.message?.message_id
-    )
 }
 
 router.post('/telegram', async (ctx: Koa.DefaultContext) => {
     const { body } = ctx.request
-    // console.log(`received webhook event. body: `, JSON.stringify(body, null, 2))
+    console.log(`received webhook event. body: `, JSON.stringify(body, null, 2))
     ctx.body = 204
 
-    // TODO: Do the rest after response is sent.
-    processWebhookBody(body).catch((err) => {
-        const chatId = getChatId(body)
-        const messageId = getMessageId(body)
-        console.error(err)
-        telegram.sendMessage(
-            chatId,
-            '❌ Something went wrong and the bot could not respond to your message. Try again soon?',
-            messageId,
-        )
-    })
+    // Note: Don't `await` here. We want to do all the work in the background after responding.
+    handleWebhookUpdate(body as t.Update)
 })
 
 app.use(router.middleware())

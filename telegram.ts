@@ -4,7 +4,7 @@ import * as config from './config'
 // A minimal Telegram bot client that implements only the methods and options
 // that I need.
 
-export default class TelegramClient {
+export class TelegramClient {
     readonly token: string
 
     constructor(token: string) {
@@ -15,7 +15,7 @@ export default class TelegramClient {
     async request(method: string, params: { [key: string]: any } = {}) {
         const url = `https://api.telegram.org/bot${this.token}/${method}`
 
-        // console.log(`makeTelegramRequest`, { method, url, params, })
+        console.log(`makeTelegramRequest`, { method, url, params })
 
         // SLOPPY: Come up with deliberate error handling.
         let response
@@ -68,15 +68,14 @@ export default class TelegramClient {
 
     // https://core.telegram.org/bots/api#sendmessage
     // https://core.telegram.org/bots/api#formatting-options
-    //
     async sendMessage(
         chatId: number,
         text: string,
         replyToMessageId?: number,
         silent = false,
         replyMarkup?: { [key: string]: any },
-    ) {
-        return this.request('sendMessage', {
+    ): Promise<Message> {
+        const body = await this.request('sendMessage', {
             chat_id: chatId,
             text,
             parse_mode: 'HTML',
@@ -84,9 +83,12 @@ export default class TelegramClient {
             disable_notification: silent,
             reply_markup: JSON.stringify(replyMarkup),
         })
+            .then((x) => x.json())
+            .then((body) => body.result as Message)
+        return body
     }
 
-    async answerCallbackQuery(callbackQueryId: number, text: string) {
+    async answerCallbackQuery(callbackQueryId: string, text: string) {
         return this.request('answerCallbackQuery', {
             callback_query_id: callbackQueryId,
             text,
@@ -133,20 +135,21 @@ export default class TelegramClient {
         })
     }
 
+    // Example response: {
+    //       file_id: 'AwACAgEAAxkBAAM2ZBCvNrpnEM5XZOKxoA5qyBtd9h0AAv0CAALeHIFE3k706dMsZlUvBA',
+    //       file_unique_id: 'AgAD_QIAAt4cgUQ',
+    //       file_size: 6493,
+    //       file_path: 'voice/file_0.oga'
+    //   }
+    async getFile(fileId: string) {
+        return this.request('getFile', { file_id: fileId })
+            .then((x) => x.json())
+            .then((x) => x.result as File)
+    }
+
     async getFileUrl(fileId: string) {
-        const body = await this.request('getFile', {
-            file_id: fileId,
-        }).then((x) => x.json())
-        // body is {
-        //     ok: true,
-        //     result: {
-        //       file_id: 'AwACAgEAAxkBAAM2ZBCvNrpnEM5XZOKxoA5qyBtd9h0AAv0CAALeHIFE3k706dMsZlUvBA',
-        //       file_unique_id: 'AgAD_QIAAt4cgUQ',
-        //       file_size: 6493,
-        //       file_path: 'voice/file_0.oga'
-        //     }
-        //   }
-        const url = `https://api.telegram.org/file/bot${config.TELEGRAM_BOT_TOKEN}/${body.result.file_path}`
+        const file = await this.getFile(fileId)
+        const url = `https://api.telegram.org/file/bot${config.TELEGRAM_BOT_TOKEN}/${file.file_path}`
         return url
     }
 
@@ -224,4 +227,61 @@ function* stringChunksOf(length: number, text: string) {
         yield slice
         i++
     }
+}
+
+////////////////////////////////////////////////////////////
+// Telegram API types
+////////////////////////////////////////////////////////////
+
+// https://core.telegram.org/bots/api#update
+export type Update = {
+    update_id: number
+} & ({ message: Message } | { callback_query: CallbackQuery })
+
+// https://core.telegram.org/bots/api#message
+export type Message = {
+    message_id: number
+    from?: User
+    text?: string
+    chat?: Chat
+    voice?: Voice
+}
+
+// https://core.telegram.org/bots/api#voice
+type Voice = {
+    file_id: string
+    file_unique_id: string
+    duration: number
+    mime_type?: string
+    file_size?: number
+}
+
+// https://core.telegram.org/bots/api#callbackquery
+export type CallbackQuery = {
+    id: string
+    data?: string
+    from?: User
+    message?: Message
+}
+
+// https://core.telegram.org/bots/api#user
+type User = {
+    id: number
+    username: string
+    language_code: string
+}
+
+// https://core.telegram.org/bots/api#chat
+type Chat = {
+    id: number
+    type: 'private' | 'group' | 'supergroup' | 'channel'
+    username?: string
+}
+
+// https://core.telegram.org/bots/api#file
+type File = {
+    file_id: string
+    file_unique_id: string
+    file_size: number
+    file_path: string
 }
