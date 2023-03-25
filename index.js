@@ -84,12 +84,6 @@ async function initializeBot() {
     })
 }
 
-initializeBot()
-    .then(() => {
-        console.log('bot initialized')
-    })
-    .catch(console.error)
-
 ////////////////////////////////////////////////////////////
 // SERVER
 ////////////////////////////////////////////////////////////
@@ -638,6 +632,12 @@ router.post('/telegram', async (ctx) => {
 })
 
 app.use(router.middleware())
-app.listen(config.PORT, () => {
-    console.log(`listening on localhost:${config.PORT}`)
-})
+
+initializeBot()
+    .then(() => {
+        console.log('bot initialized')
+        app.listen(config.PORT, () => {
+            console.log(`listening on localhost:${config.PORT}`)
+        })
+    })
+    .catch(console.error)
