@@ -1,0 +1,9 @@
+{
+    "include": ["**/*.json"],
+    "compilerOptions": {
+        "module": "CommonJS",
+        "resolveJsonModule": true,
+        // "esModuleInterop": true,
+        "lib": ["ES2015"]
+    }
+}

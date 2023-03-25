@@ -1,7 +1,7 @@
 {
     "scripts": {
         "db:reset": "psql -d telegram-chat-bot -f schema.sql",
-        "push-ec2": "rsync -av -e ssh --exclude='.env' --exclude='node_modules' --exclude='.git' --exclude='package-lock.json' ../telegram-chat-bot ubuntu@aws-cupblanket:"
+        "tsc": "tsc index.js"
     },
     "dependencies": {
         "@koa/router": "^12.0.0",
@@ -13,5 +13,9 @@
         "microsoft-cognitiveservices-speech-sdk": "^1.26.0",
         "openai": "^3.2.1",
         "pg": "^8.10.0"
+    },
+    "devDependencies": {
+        "@types/node": "^18.15.8",
+        "typescript": "^5.0.2"
     }
 }

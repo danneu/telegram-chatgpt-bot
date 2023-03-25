@@ -4,7 +4,7 @@ const db = require('./db')
 const tts = require('./tts')
 const config = require('./config')
 const TelegramClient = require('./telegram')
-const countTokens = require('./count-tokens')
+const { countTokens } = require('./tokenizer')
 const prettyVoice = require('./pretty-voice')
 // third party
 const ffmpeg = require('fluent-ffmpeg')
@@ -509,7 +509,7 @@ For example, <code>/voice en-US-AriaNeural</code>`,
         return
     }
 
-    const promptTokens = await countTokens(userText)
+    const promptTokens = countTokens(userText)
     const prompt = await db.insertAnswer({
         userId,
         chatId,

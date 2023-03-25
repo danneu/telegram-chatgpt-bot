@@ -42,7 +42,7 @@ ChatGPT conversations work by sending historical messages back to the API along 
 
 The ChatGPT API has an context limit of 4096 tokens which isn't just the total size limit of the historical message + user prompt, but also the size of the answer. This means that if you send 4000 tokens of historical messages + user prompt, the maximum response that ChatGPT will generate is ~100 tokens. This makes it hard to tune the ideal history vs. response size.
 
-For every user prompt and ChatGPT answer pair, I count the prompt tokens (using [tiktoken](https://github.com/openai/tiktoken)), get the answer tokens from the ChatGPT API response, and store the prompt/answer pair in the database along with their token count.
+For every user prompt and ChatGPT answer pair, I count the prompt tokens, get the answer tokens from the ChatGPT API response, and store the prompt/answer pair in the database along with their token count.
 
 This lets me grab context by iterating backwards through historical prompt/answer pairs until I've accumulated a sufficient amount of tokens to send to the ChatGPT API. At the time of writing, I grab 4096-512 (3584) historical message tokens which leaves 512 tokens for the prompt + answer.
 
@@ -72,23 +72,12 @@ Bot dependencies:
 
 -   Node
 -   Postgres
--   Python 3 + [openai/tiktoken](https://github.com/openai/tiktoken)
 -   [OpenAI API](https://platform.openai.com/overview)
 -   [Azure text-to-speech API](https://azure.microsoft.com/en-us/products/cognitive-services/text-to-speech/)
 
 I personally have the bot running on a t2.nano EC2 instance talking to Postgres running on the cheapest AWS RDS instance.
 
 My development bot runs on my laptop with a Cloudflare Tunnel exposing it at `https://chat.example.com/telegram` for easy testing.
-
-Ensure that Python 3 is installed and then install [openai/tiktoken](https://github.com/openai/tiktoken)
-(Used to count tokens locally):
-
-```
-pip install tiktoken
-```
-
-This bot uses the command `python3 count_tokens.py "hello world"` to count tokens, so you can ensure that works before moving forward.
-I have zero experience with Python and its ecosystem, but it seems like `python3` is always available where Python 3 is?
 
 Set up the Postgres database:
 
