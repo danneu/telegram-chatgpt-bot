@@ -1,5 +1,6 @@
 import { Configuration, OpenAIApi } from 'openai'
 import { OPENAI_API_KEY, MASTER_PROMPT } from './config'
+import { Readable } from 'stream'
 import * as fs from 'fs'
 import * as db from './db'
 
@@ -18,9 +19,13 @@ const openai = new OpenAIApi(
 // Pass it fs.createReadStream(path)
 //
 // https://github.com/openai/openai-node/issues/77
-export async function transcribeAudio(readStream: fs.ReadStream) {
+export async function transcribeAudio(stream: Readable) {
+    // Library rejects our stream unless it has path property.
+    // Note: fs.createReadStream(path) has a path property which is how I figured this out.
     //@ts-ignore
-    return openai.createTranscription(readStream, 'whisper-1')
+    stream.path = 'upload.mp3'
+    //@ts-ignore
+    return openai.createTranscription(stream, 'whisper-1')
 }
 
 export async function* streamChatCompletions(

@@ -1,3 +1,5 @@
+import { Readable } from 'stream'
+import { spawn } from 'child_process'
 // first party
 import * as openai from './openai'
 import * as db from './db'
@@ -12,12 +14,6 @@ import Koa from 'koa'
 import Router from '@koa/router'
 import logger from 'koa-logger'
 import bodyParser from 'koa-bodyparser'
-// Node
-import { createWriteStream, createReadStream, read } from 'fs'
-import { unlink, readdir } from 'fs/promises'
-import { Readable } from 'stream'
-import { finished } from 'stream/promises'
-import { join } from 'path'
 
 const telegram = new t.TelegramClient(config.TELEGRAM_BOT_TOKEN)
 
@@ -28,23 +24,8 @@ const PER_USER_CONCURRENCY = 3
 // Mapping of user_id to the number of requests they have in flight.
 const inflights: { [key: number]: number } = {}
 
-async function cleanTmpDirectory() {
-    let dir = 'tmp/answer-voice'
-    for (const file of await readdir(dir)) {
-        if (file === '.gitkeep') continue
-        await unlink(join(dir, file))
-    }
-    dir = 'tmp/user-voice'
-    for (const file of await readdir(dir)) {
-        if (file === '.gitkeep') continue
-        await unlink(join(dir, file))
-    }
-}
-
 // TODO: Should probably mkdir -p tmp/{answer-voice,user-voice}
 async function initializeBot() {
-    await cleanTmpDirectory()
-
     // https://core.telegram.org/bots/api#authorizing-your-bot
     // Check if webhook: https://core.telegram.org/bots/api#getwebhookinfo
     const webhookInfo = await telegram.getWebhookInfo()
@@ -102,37 +83,44 @@ router.get('/', async (ctx) => {
 
 // Downloads remote .ogg file, converts it to .mp3 locally, sends .mp3 to OpenAI API
 // to get text transcription, then deletes the local tmp files.
-//
-// TODO: Would be cool to pipe .ogg response to ffmpeg and then pipe ffmpeg output to API.
-async function transcribeRemoteOgg(
-    oggUrl: string,
-    fileId: string,
-): Promise<string> {
-    const localOggPath = join(__dirname, 'tmp', 'user-voice', fileId + '.ogg')
-    const localMp3Path = join(__dirname, 'tmp', 'user-voice', fileId + '.mp3')
+async function transcribeRemoteOgg(oggUrl: string): Promise<string> {
+    console.log(`[transcribeRemoteOgg] oggUrl=${oggUrl}`)
 
     const response = await fetch(oggUrl)
     if (response.status !== 200) {
         throw new Error('TODO: Handle this error')
     }
-    const writableSteam = createWriteStream(localOggPath)
-    //@ts-ignore
-    await finished(Readable.fromWeb(response.body).pipe(writableSteam))
-    console.log(`wrote ${localOggPath}`)
 
-    // Convert .ogg -> .mp3
-    await util.spawn('ffmpeg', ['-i', localOggPath, localMp3Path])
-    console.log(`converted to mp3: ${localMp3Path}`)
+    const proc = spawn('ffmpeg', [
+        // input file is ogg
+        '-f',
+        'ogg',
+        // we are piping input
+        '-i',
+        '-',
+        // output format is mp3
+        '-f',
+        'mp3',
+        // we are piping output
+        '-',
+    ])
 
-    // Send .mp3 for transcription
-    const result = await openai.transcribeAudio(createReadStream(localMp3Path))
-    const transcription = result.data.text
+    // TODO: Handle errors
+    let stderrBuf = ''
+    proc.stderr.setEncoding('utf-8')
+    proc.stderr.on('data', (chunk) => {
+        stderrBuf += chunk
+    })
 
-    // Cleanup tmp files
-    unlink(localMp3Path).catch(console.error)
-    unlink(localOggPath).catch(console.error)
+    proc.on('close', (code) => {
+        console.log('proc closed', code)
+    })
 
-    return transcription
+    //@ts-expect-error
+    const sink = Readable.fromWeb(response.body).pipe(proc.stdin)
+    const result = await openai.transcribeAudio(proc.stdout)
+
+    return result.data.text
 }
 
 // voice:English --> show the countries
@@ -319,6 +307,8 @@ async function processUserMessage(
     chat: db.Chat,
     message: t.Message,
 ) {
+    console.log(`[processUserMessage]`, user, chat, message)
+
     // Reject messages from groups until they are deliberately supported.
     if (message.chat.type !== 'private') {
         console.log('rejecting non-private chat')
@@ -336,10 +326,7 @@ async function processUserMessage(
         await telegram.indicateTyping(chatId)
 
         const remoteFileUrl = await telegram.getFileUrl(message.voice.file_id)
-        userText = await transcribeRemoteOgg(
-            remoteFileUrl,
-            message.voice.file_id,
-        )
+        userText = await transcribeRemoteOgg(remoteFileUrl)
 
         // Send transcription to user so they know how the bot interpreted their memo.
         if (userText) {
@@ -363,7 +350,7 @@ async function processUserMessage(
     }
 
     // Check if command and short-circuit
-    const command = parseCommand(message.text)
+    const command = parseCommand(userText)
     if (command) {
         await handleCommand(user.id, chat, messageId, command)
         return
@@ -462,6 +449,7 @@ type Command =
     | { type: 'scoped'; cmd: string; uname: string; text: string }
 
 function parseCommand(input: string): Command | undefined {
+    console.log(`[parseCommand] input=${input}`)
     const re = /^(\/[a-zA-Z0-9]+)(?:@([a-zA-Z0-9_]+))?(?:[ ]+(.*))?$/
     const match = input.trim().match(re)
     if (!match) return
