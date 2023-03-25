@@ -3,8 +3,6 @@ import * as config from './config'
 
 // A minimal Telegram bot client that implements only the methods and options
 // that I need.
-//
-// TODO: Send all of these as JSON bodies instead of urlencoded bodies for easier debug/inspect.
 
 export default class TelegramClient {
     readonly token: string
@@ -57,9 +55,8 @@ export default class TelegramClient {
 
     async getWebhookInfo(): Promise<{ url: string }> {
         const body = await this.request('getWebhookInfo').then((x) => x.json())
-        console.log('getWebhookInfo', body)
         return {
-            url: body.result,
+            url: body.result.url,
         }
     }
 

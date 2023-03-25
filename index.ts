@@ -7,6 +7,7 @@ import TelegramClient from './telegram'
 import { countTokens } from './tokenizer'
 import prettyVoice from './pretty-voice'
 import { spawn } from './util'
+import * as types from './types'
 // server
 import Koa from 'koa'
 import Router from '@koa/router'
@@ -116,7 +117,6 @@ async function fetchOggAndConvertToMp3(
     // Send .mp3 for transcription
     const result = await openai.transcribeAudio(createReadStream(localMp3Path))
     const transcription = result.data.text
-    console.log({ transcription })
 
     // Cleanup tmp files
     unlink(localMp3Path).catch(console.error)
@@ -306,8 +306,8 @@ async function handleCallbackQuery(body: { [key: string]: any }) {
 }
 
 async function processUserMessage(
-    user: db.User,
-    chat: db.Chat,
+    user: types.User,
+    chat: types.Chat,
     body: { [key: string]: any },
 ) {
     // Reject messages from groups until they are deliberately supported.
@@ -336,7 +336,6 @@ async function processUserMessage(
         )
 
         // Send transcription to user so they know how the bot interpreted their memo.
-        console.log({ userText })
         if (userText) {
             await telegram.sendMessage(
                 chatId,
@@ -697,7 +696,7 @@ function getMessageId(payload: { [key: string]: any }) {
 
 router.post('/telegram', async (ctx: Koa.DefaultContext) => {
     const { body } = ctx.request
-    console.log(`received webhook event. body: `, JSON.stringify(body, null, 2))
+    // console.log(`received webhook event. body: `, JSON.stringify(body, null, 2))
     ctx.body = 204
 
     // TODO: Do the rest after response is sent.

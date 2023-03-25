@@ -10,3 +10,16 @@ export type Message = {
     role: 'system' | 'assistant' | 'user'
     content: string
 }
+
+export type User = {
+    id: number
+    uname: string
+    lang: string | undefined
+}
+
+export type Chat = {
+    id: number
+    voice: string | undefined
+    send_voice: boolean
+    temperature: number
+}

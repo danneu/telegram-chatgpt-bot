@@ -23,7 +23,6 @@ export async function synthesize(
         AZURE_SPEECH_KEY,
         AZURE_SPEECH_REGION,
     )
-    console.log({ speechConfig })
     // TODO: Try other bitrates.
     speechConfig.speechSynthesisOutputFormat =
         // SpeechSynthesisOutputFormat.Audio16Khz16Bit32KbpsMonoOpus

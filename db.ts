@@ -3,19 +3,6 @@ import * as types from './types'
 import { DATABASE_URL } from './config'
 import assert from 'assert'
 
-export type User = {
-    id: number
-    uname: string
-    lang: string | undefined
-}
-
-export type Chat = {
-    id: number
-    voice: string | undefined
-    send_voice: boolean
-    temperature: number
-}
-
 // Tell pg to parse numeric column as float.
 pg.types.setTypeParser(1700, (val) => Number.parseFloat(val))
 
@@ -42,8 +29,7 @@ export async function upsertUser(
     id: number,
     uname: string,
     lang: string | undefined,
-): Promise<User> {
-    console.log(`[upsertUser] id=${id}`)
+): Promise<types.User> {
     const user = await one(
         pool,
         `
@@ -75,8 +61,7 @@ export async function upsertChat(
     id: number,
     type: string,
     uname: string,
-): Promise<Chat> {
-    console.log(`[upsertChat] id=${id}`)
+): Promise<types.Chat> {
     return one(
         pool,
         `insert into chats (id, type, uname)
@@ -155,8 +140,10 @@ export async function insertAnswer({
 }
 
 export async function setTemperature(chatId: number, temperature: number) {
-    assert(Number.isInteger(chatId), 'chatId must be integer')
-    assert(typeof temperature === 'number', 'temperature must be number')
+    assert(
+        0 <= temperature && temperature <= 1.0,
+        'temp must be in range [0, 1]',
+    )
     return pool.query(
         `
     update chats
