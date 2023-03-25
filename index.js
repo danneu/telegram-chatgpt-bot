@@ -527,20 +527,26 @@ For example, <code>/voice en-US-AriaNeural</code>`,
         // Generate answer voice transcription
         const {
             path: localAnswerVoicePath,
-            cleanup: deleteVoice,
             byteLength,
+            elapsed,
         } = await tts.synthesize(body.update_id, prompt.answer, chat.voice)
 
-        // await sendMessage(chatId, `Dijiste <i>${userText}</i>`, messageId)
-        // await sendMessage(chatId, response.answer, messageId)
-        await telegram.sendVoice(
-            chatId,
-            messageId,
-            prompt.answer,
-            localAnswerVoicePath,
-            byteLength,
-        )
-        deleteVoice()
+        await Promise.all([
+            db.setTtsElapsed(prompt.id, elapsed),
+            telegram.sendVoice(
+                chatId,
+                messageId,
+                prompt.answer,
+                localAnswerVoicePath,
+                byteLength,
+            ),
+        ])
+        unlink(localAnswerVoicePath).catch((err) => {
+            console.error(
+                `failed to delete voice at path "${localAnswerVoicePath}": ` +
+                    err,
+            )
+        })
     } else {
         for await (const response of telegram.sendMessageChain(
             chatId,

@@ -30,6 +30,7 @@ create table prompts (
     answer text not null,
     prompt_tokens int not null,
     answer_tokens int not null,
+    tts_elapsed int null, -- milliseconds it took for TTS API to respond
     created_at timestamptz not null default now()
 );
 

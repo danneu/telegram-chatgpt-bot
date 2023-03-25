@@ -1,4 +1,3 @@
-const { unlink } = require('fs/promises')
 const {
     SpeechSynthesisOutputFormat,
 } = require('microsoft-cognitiveservices-speech-sdk')
@@ -17,7 +16,6 @@ async function synthesize(messageId, text, voice = DEFAULT_VOICE) {
     console.log(
         `[synthesize] sending voice synthesize request. messageId=${messageId} text length="${text.length}" voice=${voice}`,
     )
-    const start = Date.now()
     const speechConfig = sdk.SpeechConfig.fromSubscription(
         AZURE_SPEECH_KEY,
         AZURE_SPEECH_REGION,
@@ -38,6 +36,7 @@ async function synthesize(messageId, text, voice = DEFAULT_VOICE) {
     let synthesizer = new sdk.SpeechSynthesizer(speechConfig, audioConfig)
 
     return new Promise((resolve, reject) => {
+        const start = Date.now()
         synthesizer.speakTextAsync(
             text,
             (result) => {
@@ -53,10 +52,8 @@ async function synthesize(messageId, text, voice = DEFAULT_VOICE) {
                     // console.log(`[synthesize] result:`, result)
                     resolve({
                         byteLength: result.privAudioData.byteLength,
+                        elapsed: Date.now() - start,
                         path: localOggPath,
-                        cleanup: () => {
-                            unlink(localOggPath)
-                        },
                     })
                 } else {
                     reject(

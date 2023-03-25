@@ -59,11 +59,10 @@ module.exports = class TelegramClient {
         replyToMessageId,
         // If true, not even the first message will trigger notification
         silent = false,
-        chunkLength = 4096,
     ) {
         let prevId = replyToMessageId
 
-        for (const chunk of stringChunksOf(chunkLength, text)) {
+        for (const chunk of stringChunksOf(4096, text)) {
             const response = await this.request('sendMessage', {
                 chat_id: chatId,
                 text: chunk,

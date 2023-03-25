@@ -78,6 +78,19 @@ returning *
     )
 }
 
+module.exports.setTtsElapsed = async function (promptId, elapsed) {
+    assert(Number.isInteger(promptId))
+    assert(Number.isInteger(elapsed))
+    return pool.query(
+        `
+    update prompts
+    set tts_elapsed = $2
+    where id = $1
+    `,
+        [promptId, elapsed],
+    )
+}
+
 module.exports.insertAnswer = async function ({
     userId,
     chatId,
