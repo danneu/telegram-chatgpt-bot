@@ -1,0 +1,17 @@
+{
+    "scripts": {
+        "db:reset": "psql -d telegram-chat-bot -f schema.sql",
+        "push-ec2": "rsync -av -e ssh --exclude='.env' --exclude='node_modules' --exclude='.git' --exclude='package-lock.json' ../telegram-chat-bot ubuntu@aws-cupblanket:"
+    },
+    "dependencies": {
+        "@koa/router": "^12.0.0",
+        "dotenv": "^16.0.3",
+        "fluent-ffmpeg": "^2.1.2",
+        "koa": "^2.14.1",
+        "koa-bodyparser": "^4.3.0",
+        "koa-logger": "^3.2.1",
+        "microsoft-cognitiveservices-speech-sdk": "^1.26.0",
+        "openai": "^3.2.1",
+        "pg": "^8.10.0"
+    }
+}
