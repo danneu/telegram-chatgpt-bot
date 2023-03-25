@@ -20,10 +20,9 @@ Caveat: The bot has a slow response time. Most of the time is spent waiting for 
 
 -   [x] **Two-way voice memos**. I really liked the idea of talking to ChatGPT with voice and then receiving voice responses, especially for practicing a different language.
 -   [x] **Language/voice selection**. `/setvoice` gives you a inline menu for quickly changing the bot's voice + language.
--   [x] Long messages are sent as a chain of messages that reply to the preceding message.
--   [x] Voice memos can be toggled off which speeds up the bot responses.
+-   [x] **Streaming updates**. Similar to ChatGPT's online UI, tokens show up in the Telegram message as the bot receives them.
+    -   This is implemented by repeatedly updating the message as tokens are received.
 -   [x] The bot indicates "Bot is typing..." while it waits for ChatGPT.
-    -   Caveat: Telegram only shows the indicator for 5 seconds even though the bot can take a lot longer to respond.
 -   [ ] The bot can be used in group chats.
     -   Caveat: Only 1:1 private chats are supported for now while I figure out how group chats should work.
 -   [ ] Automatically change voice/language according to user prompt language.
