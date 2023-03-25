@@ -15,6 +15,7 @@ Caveat: The bot has a slow response time. Most of the time is spent waiting for 
 -   `/voiceon`, `/voiceoff`: Toggle voice memos from the bot
 -   `/info`: Show bot settings (current language, current temperature, voices on/off)
 -   `/clear`: Clear the conversation context
+-   `/ai {message}`: Talk to bot (group-chat only)
 
 ## Features
 
@@ -23,8 +24,7 @@ Caveat: The bot has a slow response time. Most of the time is spent waiting for 
 -   [x] **Streaming updates**. Similar to ChatGPT's online UI, tokens show up in the Telegram message as the bot receives them.
     -   This is implemented by repeatedly updating the message as tokens are received.
 -   [x] The bot indicates "Bot is typing..." while it waits for ChatGPT.
--   [ ] The bot can be used in group chats.
-    -   Caveat: Only 1:1 private chats are supported for now while I figure out how group chats should work.
+-   [x] The bot can be used in group chats.
 -   [ ] Automatically change voice/language according to user prompt language.
 
 ## Why Telegram?
