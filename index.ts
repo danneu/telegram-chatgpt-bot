@@ -82,36 +82,43 @@ router.get('/', async (ctx) => {
 })
 
 // Pipes input ogg stream into output mp3 stream which is streamed to OpenAI API for text transcription.
-async function transcribeOggStream(oggStream: Readable): Promise<string> {
-    const proc = spawn('ffmpeg', [
-        // input file is ogg
-        '-f',
-        'ogg',
-        // we are piping input
-        '-i',
-        '-',
-        // output format is mp3
-        '-f',
-        'mp3',
-        // we are piping output
-        '-',
-    ])
-
-    // TODO: Handle errors
-    let stderrBuf = ''
-    proc.stderr.setEncoding('utf-8')
-    proc.stderr.on('data', (chunk) => {
-        stderrBuf += chunk
+async function transcribeOggStream(input: Readable): Promise<string> {
+    input.on('error', (err) => {
+        console.log('Error on ogg input stream:', err)
     })
 
-    proc.on('close', (code) => {
-        console.log('proc closed', code)
+    return new Promise(async (resolve, reject) => {
+        try {
+            const args = ['-f', 'ogg', '-i', 'pipe:0', '-f', 'mp3', 'pipe:1']
+            const proc = spawn('ffmpeg', args, {
+                // ensure stderr is inherited from the parent process so we can see ffmpeg errors
+                stdio: ['pipe', 'pipe', 'inherit'],
+            })
+
+            input.pipe(proc.stdin)
+
+            proc.on('error', (err) => {
+                console.error('Error in ffmpeg process:', err)
+                reject(err)
+            })
+
+            proc.on('exit', (code, signal) => {
+                if (code) {
+                    const errorMsg = `ffmpeg exited with code ${code} and signal ${signal}`
+                    console.error(errorMsg)
+                    reject(new Error(errorMsg))
+                }
+                input.destroy()
+                proc.stdin.destroy()
+            })
+
+            const result = await openai.transcribeAudio(proc.stdout)
+            resolve(result.data.text)
+        } catch (err) {
+            console.error('transcribe error:', err)
+            reject(err)
+        }
     })
-
-    oggStream.pipe(proc.stdin)
-    const result = await openai.transcribeAudio(proc.stdout)
-
-    return result.data.text
 }
 
 // voice:English --> show the countries
