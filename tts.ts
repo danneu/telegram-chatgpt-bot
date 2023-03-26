@@ -22,9 +22,8 @@ export async function synthesize(
         AZURE_SPEECH_KEY,
         AZURE_SPEECH_REGION,
     )
-    // TODO: Try other bitrates.
     speechConfig.speechSynthesisOutputFormat =
-        sdk.SpeechSynthesisOutputFormat.Ogg16Khz16BitMonoOpus
+        sdk.SpeechSynthesisOutputFormat.Ogg48Khz16BitMonoOpus
     speechConfig.speechSynthesisVoiceName = voice
 
     const pullStream = sdk.PullAudioOutputStream.createPullStream()
