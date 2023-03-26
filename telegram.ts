@@ -15,7 +15,7 @@ export class TelegramClient {
     async request(method: string, params: { [key: string]: any } = {}) {
         const url = `https://api.telegram.org/bot${this.token}/${method}`
 
-        console.log(`makeTelegramRequest`, { method, url, params })
+        console.log(`makeTelegramRequest`, url /* params */)
 
         // SLOPPY: Come up with deliberate error handling.
         let response

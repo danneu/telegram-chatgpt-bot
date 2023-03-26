@@ -1,6 +1,7 @@
 import { Readable } from 'stream'
 import { spawn } from 'child_process'
 // first party
+import * as voz from './voice'
 import * as openai from './openai'
 import * as db from './db'
 import * as tts from './tts'
@@ -41,7 +42,7 @@ async function initializeBot() {
 
     await telegram.setMyCommands([
         {
-            command: 'setvoice',
+            command: 'voice',
             description: 'set bot language',
         },
         {
@@ -53,7 +54,7 @@ async function initializeBot() {
             description: 'enable voice responses',
         },
         {
-            command: 'settemp',
+            command: 'temp',
             description: 'set temperature (randomness)',
         },
         { command: 'info', description: 'show bot settings' },
@@ -168,6 +169,22 @@ const VOICE_MENU: { [key: string]: any } = {
         Colombia: {
             Salome: 'es-CO-SalomeNeural',
             Gonzalo: 'es-CO-GonzaloNeural',
+        },
+        Venezuela: {
+            Paola: 'es-VE-PaolaNeural',
+            Sebastian: 'es-VE-SebastianNeural',
+        },
+    },
+    French: {
+        France: {
+            Brigitte: 'fr-FR-BrigitteNeural',
+            Alain: 'fr-FR-AlainNeural',
+            Celeste: 'fr-FR-CelesteNeural',
+            Claude: 'fr-FR-ClaudeNeural',
+        },
+        Canada: {
+            Sylvie: 'fr-CA-SylvieNeural',
+            Antoine: 'fr-CA-AntoineNeural',
         },
     },
 }
@@ -424,13 +441,27 @@ async function processUserMessage(
     })
 
     // Send trailing voice memo.
-    await telegram.indicateTyping(chatId)
+    telegram.indicateTyping(chatId) // Don't await
     if (chat.send_voice) {
+        // Determine if there's a likely mismatch with bot response
+        const languageResult = await openai.detectLanguage(answer)
+        let finalVoice = chat.voice
+        console.log({ languageResult })
+        if (languageResult.kind === 'success') {
+            const voice = voz.voiceFromLanguageCode(languageResult.code)
+            if (voice && voice !== chat.voice) {
+                console.log('Changing voice to', voice)
+                finalVoice = voice
+            } else {
+                console.log('did not change voice. is still: ', chat.voice)
+            }
+        }
+
         // Generate answer voice transcription
         const { byteLength, elapsed, readable } = await tts.synthesize(
             message.message_id,
             prompt.answer,
-            chat.voice,
+            finalVoice,
         )
 
         await Promise.all([
@@ -487,7 +518,9 @@ async function handleCommand(
         await telegram.indicateTyping(chatId)
         return telegram.sendMessage(
             chatId,
-            `Hello! I'm an AI chat bot powered by ChatGPT. Go ahead and ask me something.\n\nI respond in English by default. Use /setvoice to use a different language.`,
+            `🎉 Hello! I'm an AI chatbot powered by ChatGPT. Go ahead and ask me something. I even understand voice memos.\n\nMy voice is set to <b>${prettyVoice(
+                chat.voice || tts.DEFAULT_VOICE,
+            )}</b>. Use /voice to use a different language.`,
         )
     } else if (command.cmd === '/clear') {
         await telegram.indicateTyping(chatId)
@@ -550,7 +583,7 @@ Bot info:
             }),
         })
         return
-    } else if (command.cmd === '/setvoice') {
+    } else if (command.cmd === '/voice') {
         await telegram.indicateTyping(chatId)
         const url = `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/sendMessage`
 
@@ -679,6 +712,9 @@ async function handleGroupMessage(
 
 async function handleWebhookUpdate(update: t.Update) {
     if ('message' in update) {
+        if (!update.message.text) {
+            return
+        }
         const message = update.message
         const user = await db.upsertUser(
             message.from.id,

@@ -10,21 +10,20 @@ Caveat: The bot has a slow response time. Most of the time is spent waiting for 
 
 ## Commands
 
--   `/setvoice`: Choose the bot's language + voice for its voice memos
--   `/settemp`: Change the temperature (randomness) of ChatGPT responses
+-   `/voice`: Choose the bot's language + voice for its voice memos
+-   `/temp`: Change the temperature (randomness) of ChatGPT responses
 -   `/voiceon`, `/voiceoff`: Toggle voice memos from the bot
 -   `/info`: Show bot settings (current language, current temperature, voices on/off)
 -   `/clear`: Clear the conversation context
--   `/ai {message}`: Talk to bot (group-chat only)
 
 ## Features
 
 -   [x] **Two-way voice memos**. I really liked the idea of talking to ChatGPT with voice and then receiving voice responses, especially for practicing a different language.
--   [x] **Language/voice selection**. `/setvoice` gives you a inline menu for quickly changing the bot's voice + language.
+-   [x] **Language/voice selection**. `/voice` gives you a inline menu for quickly changing the bot's voice + language.
+-   [x] **Language autodetection**. If the bot is responding in a language different from the one configured with `/voice`, it uses a default voice in that language instead of forcing, for example, a Spanish voice to butcher German.
 -   [x] **Streaming updates**. Similar to ChatGPT's online UI, tokens show up in the Telegram message as the bot receives them.
     -   This is implemented by repeatedly updating the message as tokens are received.
--   [x] The bot indicates "Bot is typing..." while it waits for ChatGPT.
--   [x] The bot can be used in group chats.
+-   [ ] Group chat support.
 -   [ ] Automatically change voice/language according to user prompt language.
 
 ## Why Telegram?
