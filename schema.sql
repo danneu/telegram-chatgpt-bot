@@ -3,8 +3,8 @@ create schema public;
 
 create table users (
     id int primary key, -- telegram id
-    uname text not null, -- telegram username (may change)
-    lang text not null, -- 2-char lang code sent in every update. can use this for UI.
+    uname text, -- telegram username (may change)
+    lang text, -- 2-char lang code sent in every update. can use this for UI.
     created_at timestamptz not null default now()
 );
 
