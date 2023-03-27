@@ -402,11 +402,7 @@ async function processUserMessage(
     const gptStart = Date.now()
     let tokens
     try {
-        tokens = await openai.streamChatCompletions(
-            history,
-            userText,
-            chat.temperature,
-        )
+        tokens = await openai.streamChatCompletions(messages, chat.temperature)
     } catch (err) {
         // TODO: haven't tested this.
         if (err.response?.status === 429) {
