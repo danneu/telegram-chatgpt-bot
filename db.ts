@@ -1,7 +1,7 @@
 import pg from 'pg'
-// import * as types from './types'
 import { DATABASE_URL } from './config'
 import assert from 'assert'
+import { countTokens } from './tokenizer'
 
 // Tell pg to parse numeric column as float.
 pg.types.setTypeParser(1700, (val) => Number.parseFloat(val))
@@ -155,7 +155,11 @@ export async function setTemperature(chatId: number, temperature: number) {
 }
 
 // export async function listHistory(userId: number, chatId: number) {
-export async function listHistory(chatId: number) {
+export async function listHistory(
+    chatId: number,
+    systemPrompt: string,
+    userPrompt: string,
+) {
     const { rows }: { rows: Prompt[] } = await pool.query(
         `
         select * from prompts
@@ -171,12 +175,17 @@ export async function listHistory(chatId: number) {
     // This means that the following code tries to load 4096-512 tokens of historical messages
     // and leaves 512 tokens between the user prompt (usually short in the Telegram chat setting) and
     // ChatGPT's answer.
-    let budget = 4096 - 512
-    let output: Message[] = []
+    let budget =
+        4096 - 512 - countTokens(systemPrompt) - countTokens(userPrompt)
+
+    // Reminder: The messages will get reversed at the end.
+    let output: Message[] = [{ role: 'user', content: userPrompt }]
+
     for (const row of rows) {
         if (budget - row.answer_tokens < 0) {
             break
         }
+        // assistant first because we're going to reverse it
         budget -= row.answer_tokens
         output.push({
             role: 'assistant',
@@ -192,6 +201,11 @@ export async function listHistory(chatId: number) {
             content: row.prompt,
         })
     }
+
+    output.push({
+        role: 'system',
+        content: systemPrompt,
+    })
 
     return output.reverse()
 }

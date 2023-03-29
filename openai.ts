@@ -4,12 +4,6 @@ import { Readable } from 'stream'
 import * as util from './util'
 import * as db from './db'
 
-// Not sure if this system prompt even does anything, but I want to:
-// 1. Avoid ChatGPT's disclaimer-heavy responses.
-// 2. Encourage brevity since it's for Telegram.
-const DEFAULT_MASTER_PROMPT =
-    "Be as brief as possible. Do not write anything except the answer to the question. For example, do not say that you don't have an opinion on something nor that there are many answers to a question. Instead, choose a random believable answer."
-
 const openai = new OpenAIApi(
     new Configuration({
         apiKey: OPENAI_API_KEY,
@@ -29,19 +23,9 @@ export async function transcribeAudio(mp3Stream: Readable) {
 }
 
 export async function* streamChatCompletions(
-    history: db.Message[],
-    prompt: string,
+    messages: db.Message[],
     temperature: number,
 ): AsyncGenerator<string> {
-    const messages: db.Message[] = [
-        // FIXME: master prompt length is not considered in our token budget during history gathering.
-        {
-            role: 'system',
-            content: MASTER_PROMPT || DEFAULT_MASTER_PROMPT,
-        },
-        ...history,
-        { role: 'user', content: prompt },
-    ]
     const response = await openai.createChatCompletion(
         {
             model: 'gpt-3.5-turbo',
@@ -77,20 +61,9 @@ export async function* streamChatCompletions(
 }
 
 module.exports.fetchChatResponse = async function (
-    history: db.Message[],
-    prompt: string,
+    messages: db.Message[],
     temperature: number,
 ) {
-    const messages: db.Message[] = [
-        // FIXME: master prompt length is not considered in our token budget during history gathering.
-        {
-            role: 'system',
-            content: MASTER_PROMPT || DEFAULT_MASTER_PROMPT,
-        },
-        ...history,
-        { role: 'user', content: prompt },
-    ]
-
     console.log(
         `[fetchChatResponse] making chatgpt request with ${
             messages.length - 1
@@ -145,12 +118,11 @@ export async function detectLanguage(
     text: string,
 ): Promise<LanguageResult | undefined> {
     const substring = util.splitTake(300, text)
-    console.log(text, substring)
-    console.log(`[detectLanguage] making OpenAI request...`)
+    const fullPrompt = prompt + '```' + substring + '```'
     const response = await openai.createChatCompletion(
         {
             model: 'gpt-3.5-turbo',
-            messages: [{ role: 'user', content: prompt + substring }],
+            messages: [{ role: 'user', content: fullPrompt }],
             max_tokens: 1,
             temperature: 0,
         },

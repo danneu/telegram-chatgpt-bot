@@ -2,18 +2,15 @@ import * as sdk from 'microsoft-cognitiveservices-speech-sdk'
 import { AZURE_SPEECH_KEY, AZURE_SPEECH_REGION } from './config'
 import { Readable } from 'stream'
 
-export const DEFAULT_VOICE = 'en-US-JennyMultilingualNeural'
-
 export async function synthesize(
     messageId: number,
     text: string,
-    voice = DEFAULT_VOICE,
+    voice: string,
 ): Promise<{
     elapsed: number
     byteLength: number
     readable: Readable
 }> {
-    voice = voice || DEFAULT_VOICE
     console.log(
         `[synthesize] sending voice synthesize request. messageId=${messageId} text length="${text.length}" voice=${voice}`,
     )

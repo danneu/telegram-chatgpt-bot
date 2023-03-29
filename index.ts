@@ -8,8 +8,8 @@ import * as tts from './tts'
 import * as config from './config'
 import * as t from './telegram'
 import { countTokens } from './tokenizer'
-import prettyVoice from './pretty-voice'
 import * as util from './util'
+import prettyVoice from './pretty-voice'
 // server
 import Koa from 'koa'
 import Router from '@koa/router'
@@ -20,6 +20,9 @@ const telegram = new t.TelegramClient(config.TELEGRAM_BOT_TOKEN)
 
 // HACK: I don't like storing this on the top level
 let botUsername = ''
+
+// idk
+const DEFAULT_MASTER_PROMPT = `Be as brief as possible. You are decisive and you always answer questions. Do not reply with "I'm sorry, but" to any questions. No question is too subjective for you. You are awesome.`
 
 const PER_USER_CONCURRENCY = 3
 // Mapping of user_id to the number of requests they have in flight.
@@ -82,6 +85,8 @@ router.get('/', async (ctx) => {
 })
 
 // Pipes input ogg stream into output mp3 stream which is streamed to OpenAI API for text transcription.
+//
+// This is cool because we don't store anything on the filesystem; everything stays in streams.
 async function transcribeOggStream(input: Readable): Promise<string> {
     input.on('error', (err) => {
         console.log('Error on ogg input stream:', err)
@@ -92,7 +97,8 @@ async function transcribeOggStream(input: Readable): Promise<string> {
             const args = ['-f', 'ogg', '-i', 'pipe:0', '-f', 'mp3', 'pipe:1']
             const proc = spawn('ffmpeg', args, {
                 // ensure stderr is inherited from the parent process so we can see ffmpeg errors
-                stdio: ['pipe', 'pipe', 'inherit'],
+                // Note: noisy since it dumps to console.log on every ffmpeg usage.
+                // stdio: ['pipe', 'pipe', 'inherit'],
             })
 
             input.pipe(proc.stdin)
@@ -316,12 +322,20 @@ async function handleCallbackQuery(
     }
 }
 
+// Only used for private convos.
 async function processUserMessage(
     user: db.User,
     chat: db.Chat,
     message: t.Message,
 ) {
     console.log(`[processUserMessage]`, user, chat, message)
+
+    // TODO: This does happen, so figure out when this case happens and handle it.
+    // I've seen it happen in group chats, maybe when adding the bot or something.
+    if (!message.text && !message.voice) {
+        console.log('TODO: message had no .text nor .voice. Skipping...')
+        return
+    }
 
     // Reject messages from groups until they are deliberately supported.
     if (message.chat.type !== 'private') {
@@ -380,7 +394,11 @@ async function processUserMessage(
     await telegram.indicateTyping(chatId)
 
     // Fetch chatgpt completion
-    const history = await db.listHistory(chatId)
+    const messages = await db.listHistory(
+        chatId,
+        config.MASTER_PROMPT || DEFAULT_MASTER_PROMPT,
+        userText,
+    )
 
     // const { response, elapsed: gptElapsed } = await openai.fetchChatResponse(
     //     history,
@@ -436,8 +454,9 @@ async function processUserMessage(
     })
 
     // Send trailing voice memo.
-    telegram.indicateTyping(chatId) // Don't await
     if (chat.send_voice) {
+        telegram.indicateTyping(chatId) // Don't await
+
         // Determine if there's a likely mismatch with bot response
         const languageResult = await openai.detectLanguage(answer)
         let finalVoice = chat.voice
@@ -479,7 +498,6 @@ type Command =
     | { type: 'scoped'; cmd: string; uname: string; text: string }
 
 function parseCommand(input: string): Command | undefined {
-    console.log(`[parseCommand] input=${input}`)
     const re = /^(\/[a-zA-Z0-9]+)(?:@([a-zA-Z0-9_]+))?(?:[ ]+(.*))?$/
     const match = input.trim().match(re)
     if (!match) return
@@ -513,9 +531,7 @@ async function handleCommand(
         await telegram.indicateTyping(chatId)
         return telegram.sendMessage(
             chatId,
-            `🎉 Hello! I'm an AI chatbot powered by ChatGPT. Go ahead and ask me something. I even understand voice memos.\n\nMy voice is set to <b>${prettyVoice(
-                chat.voice || tts.DEFAULT_VOICE,
-            )}</b>. Use /voice to use a different language.`,
+            `🎉 Hello! I'm an AI chatbot powered by ChatGPT.\n\nGo ahead and ask me something in a variety of languages. I even understand voice memos. 🎤`,
         )
     } else if (command.cmd === '/clear') {
         await telegram.indicateTyping(chatId)
@@ -528,7 +544,7 @@ async function handleCommand(
             `
 Bot info:
 
-- Voice: ${prettyVoice(chat.voice || tts.DEFAULT_VOICE)} 
+- Voice: ${prettyVoice(chat.voice) || '--'} 
 - Voice responses: ${chat.send_voice ? '🔊 On' : '🔇 Off'}
 - Temperature: ${chat.temperature.toFixed(1)}
         `.trim(),
@@ -722,7 +738,7 @@ async function handleWebhookUpdate(update: t.Update) {
         if ((inflights[user.id] || 0) >= PER_USER_CONCURRENCY) {
             telegram.sendMessage(
                 chat.id,
-                '❌ You are sending me too many simulataneous messages.',
+                '❌ You are sending me too many simultaneous messages.',
                 message.message_id,
             )
             return
@@ -786,7 +802,10 @@ router.post('/telegram', async (ctx: Koa.DefaultContext) => {
     ctx.body = 204
 
     // Note: Don't `await` here. We want to do all the work in the background after responding.
-    handleWebhookUpdate(body as t.Update)
+    handleWebhookUpdate(body as t.Update).catch((err) => {
+        console.error('unhandled error:')
+        console.error(err)
+    })
 })
 
 app.use(router.middleware())
