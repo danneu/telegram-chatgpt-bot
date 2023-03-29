@@ -25,7 +25,6 @@ const PER_USER_CONCURRENCY = 3
 // Mapping of user_id to the number of requests they have in flight.
 const inflights: { [key: number]: number } = {}
 
-// TODO: Should probably mkdir -p tmp/{answer-voice,user-voice}
 async function initializeBot() {
     // https://core.telegram.org/bots/api#authorizing-your-bot
     // Check if webhook: https://core.telegram.org/bots/api#getwebhookinfo
