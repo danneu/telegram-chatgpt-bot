@@ -707,9 +707,6 @@ async function handleGroupMessage(
 
 async function handleWebhookUpdate(update: t.Update) {
     if ('message' in update) {
-        if (!update.message.text) {
-            return
-        }
         const message = update.message
         const user = await db.upsertUser(
             message.from.id,

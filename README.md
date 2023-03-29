@@ -23,7 +23,7 @@ Caveat: The bot has a slow response time. Most of the time is spent waiting for 
 -   [x] **Language autodetection**. If the bot is responding in a language different from the one configured with `/voice`, it uses a default voice in that language instead of forcing, for example, a Spanish voice to butcher German.
 -   [x] **Streaming updates**. Similar to ChatGPT's online UI, tokens show up in the Telegram message as the bot receives them.
     -   This is implemented by repeatedly updating the message as tokens are received.
--   [ ] Group chat support.
+-   [ ] Group chat support. (Still need to figure out how it should work)
 -   [ ] Automatically change voice/language according to user prompt language.
 
 ## Why Telegram?
