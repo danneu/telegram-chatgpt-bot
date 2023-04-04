@@ -531,7 +531,7 @@ async function handleCommand(
         await telegram.indicateTyping(chatId)
         return telegram.sendMessage(
             chatId,
-            `🎉 Hello! I'm an AI chatbot powered by ChatGPT.\n\nGo ahead and ask me something in a variety of languages. I even understand voice memos. 🎤`,
+            `🎉 Hello! I'm an AI chatbot powered by ChatGPT.\n\nGo ahead and ask me something in a variety of languages. I even understand voice memos. 🎤\n\nNote: Only one-on-one private chats are supported at the moment.\n\nHelp wanted! Source code: https://github.com/danneu/telegram-chatgpt-bot`,
         )
     } else if (command.cmd === '/clear') {
         await telegram.indicateTyping(chatId)
