@@ -850,7 +850,12 @@ async function streamTokensToTelegram(
         }
         if (sentBuf !== buf) {
             sentBuf = buf
-            await telegram.editMessageText(chatId, prevId!, buf + cursor)
+            await telegram
+                .editMessageText(chatId, prevId!, buf + cursor)
+                .catch((err) => {
+                    // Don't crash on error
+                    console.error(err)
+                })
         }
         setTimeout(editLoop, 1000)
     }
