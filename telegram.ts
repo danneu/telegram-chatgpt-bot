@@ -91,6 +91,8 @@ export class TelegramClient {
             reply_to_message_id: replyToMessageId,
             disable_notification: silent,
             reply_markup: JSON.stringify(replyMarkup),
+            // Saves some weird runtime errors. TODO: Make this configurable.
+            allow_sending_without_reply: true,
         })
             .then((x) => x.json())
             .then((body) => body.result as Message)
