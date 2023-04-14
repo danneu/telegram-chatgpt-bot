@@ -12,12 +12,14 @@ Demo: <a href="https://t.me/god_in_a_bot">@god_in_a_bot</a>
 
 (Click to enlarge)
 
-<a href="img/temp.png"><img src="img/temp.png" width="28%"></a>
-<a href="img/retry.png"><img src="img/retry.png" width="28%"></a>
-<a href="img/prompt.png"><img src="img/prompt.png" width="28%"></a>
-<a href="img/model.png"><img src="img/model.png" width="28%"></a>
-<a href="img/info.png"><img src="img/info.png" width="28%"></a>
-<a href="img/img.png"><img src="img/img.png" width="28%"></a>
+<a href="img/1-voice.png"><img src="img/1-voice.png" width="28%"></a>
+<a href="img/2-prompt.png"><img src="img/2-prompt.png" width="28%"></a>
+<a href="img/3-retry.png"><img src="img/3-retry.png" width="28%"></a>
+<a href="img/4-img.png"><img src="img/4-img.png" width="28%"></a>
+<a href="img/5-info.png"><img src="img/5-info.png" width="28%"></a>
+<a href="img/6-model.png"><img src="img/6-model.png" width="28%"></a>
+<a href="img/7-temp.png"><img src="img/7-temp.png" width="28%"></a>
+<a href="img/8-usage.png"><img src="img/8-usage.png" width="28%"></a>
 
 ## Commands
 
@@ -31,6 +33,7 @@ Demo: <a href="https://t.me/god_in_a_bot">@god_in_a_bot</a>
 -   `/model`: Change gpt model (Must configure `CAN_MANAGE_MODEL` env var for this to work)
 -   `/retry`: Regenerate last bot answer
 -   `/img <prompt>`: Generate a Dall-e image (note: unaffected by `/retry`)
+-   `/usage`: Show this month's billing total (User must be whitelisted)
 
 ## Features
 

@@ -834,6 +834,24 @@ Bot info:
                 messageId,
             )
         }
+    } else if (command.cmd === '/usage') {
+        if (canManageModel(userId)) {
+            const usage = await openai.getMonthUsage()
+            if (usage === undefined) {
+                await telegram.sendMessage(
+                    chatId,
+                    `⚠️ Sorry, I can't get your usage right now.`,
+                    messageId,
+                )
+
+                return
+            }
+            await telegram.sendMessage(
+                chatId,
+                `💵 Your usage this month: $${usage.toFixed(2)}`,
+                messageId,
+            )
+        }
     } else if (command.cmd === '/model') {
         if (canManageModel(userId)) {
             await telegram.request('sendMessage', {

@@ -293,3 +293,37 @@ export async function dalleGenerateImages(
         throw new Error('Unhandled case')
     }
 }
+
+// Uses private API.
+//
+// Returns undefined if API fails so it can be easily discarded.
+export async function getMonthUsage(): Promise<number | undefined> {
+    function formatDate(date: Date): string {
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${date.getFullYear()}-${month}-${day}`
+    }
+
+    const now = new Date()
+    const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    const url = `https://api.openai.com/dashboard/billing/usage?start_date=${formatDate(
+        startDate,
+    )}&end_date=${formatDate(endDate)}`
+
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        referrer: 'https://platform.openai.com/',
+    })
+
+    if (response.status !== 200) {
+        return
+    }
+
+    const body = await response.json()
+    const usd = body.total_usage / 100
+    return usd
+}
