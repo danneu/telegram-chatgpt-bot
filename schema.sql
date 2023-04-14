@@ -21,9 +21,6 @@ create table chats (
     created_at timestamptz not null default now()
 );
 
-alter table chats add column model text not null default 'gpt-3.5-turbo';
-
-
 create table prompts (
     id serial primary key,
     chat_id bigint not null references chats(id),
@@ -38,4 +35,7 @@ create table prompts (
     lang text null,
     created_at timestamptz not null default now()
 );
+
+create index prompts_chat_id_idx on prompts (chat_id);
+create index prompts_user_id_idx on prompts (user_id);
 
