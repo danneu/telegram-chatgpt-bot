@@ -2,9 +2,7 @@
 
 A self-hostable Telegram bot that lets you speak with ChatGPT through text and voice memos. Notably, you can send it voice memos and it can respond with voice memos.
 
-Demo: <https://t.me/god_in_a_bot> (Please don't abuse -- the bot is only ready for personal use at the moment)
-
-Caveat: The bot has a slow response time. Most of the time is spent waiting for ChatGPT, though only a couple more seconds are lost waiting for audio transcription and text-to-speech synethesis.
+Demo: <https://t.me/god_in_a_bot> (Only supports 1:1 private convos)
 
 ![screenshot](demo.png)
 
