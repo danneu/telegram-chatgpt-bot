@@ -695,67 +695,65 @@ For example, <code>/voice en-US-AriaNeural</code>`,
         }
         return
     } else if (command.cmd === '/ai' && command.text) {
-        await telegram.indicateTyping(chatId)
-        // TODO: For group chats, consider chat history from all users, not just from userId
-        const history = await db.listHistory(chatId)
-        const gptStart = Date.now()
-        let tokens
-        try {
-            tokens = await openai.streamChatCompletions(
-                history,
-                command.text,
-                chat.temperature,
-            )
-        } catch (err) {
-            // TODO: haven't tested this.
-            if (err.response?.status === 429) {
-                await telegram.sendMessage(
-                    chatId,
-                    `❌ Bot is rate-limited by OpenAI API. Try again soon.`,
-                    messageId,
-                )
-                return
-            } else {
-                throw err
-            }
-        }
-
-        const { answer, messageId: answerMessageId } =
-            await streamTokensToTelegram(chatId, messageId, tokens)
-        const gptElapsed = Date.now() - gptStart
-        const promptTokens = countTokens(command.text)
-        const prompt = await db.insertAnswer({
-            userId,
-            chatId,
-            prompt: command.text,
-            promptTokens,
-            messageId: answerMessageId,
-            answer,
-            answerTokens: countTokens(answer),
-            gptElapsed,
-        })
-
-        // Send trailing voice memo.
-        await telegram.indicateTyping(chatId)
-        if (chat.send_voice) {
-            // Generate answer voice transcription
-            const { byteLength, elapsed, readable } = await tts.synthesize(
-                messageId,
-                prompt.answer,
-                chat.voice,
-            )
-
-            await Promise.all([
-                db.setTtsElapsed(prompt.id, elapsed),
-                telegram.sendVoice(
-                    chatId,
-                    answerMessageId,
-                    '',
-                    readable,
-                    byteLength,
-                ),
-            ])
-        }
+        return
+        // await telegram.indicateTyping(chatId)
+        // // TODO: For group chats, consider chat history from all users, not just from userId
+        // const history = await db.listHistory(chatId)
+        // const gptStart = Date.now()
+        // let tokens
+        // try {
+        //     tokens = await openai.streamChatCompletions(
+        //         history,
+        //         command.text,
+        //         chat.temperature,
+        //     )
+        // } catch (err) {
+        //     // TODO: haven't tested this.
+        //     if (err.response?.status === 429) {
+        //         await telegram.sendMessage(
+        //             chatId,
+        //             `❌ Bot is rate-limited by OpenAI API. Try again soon.`,
+        //             messageId,
+        //         )
+        //         return
+        //     } else {
+        //         throw err
+        //     }
+        // }
+        // const { answer, messageId: answerMessageId } =
+        //     await streamTokensToTelegram(chatId, messageId, tokens)
+        // const gptElapsed = Date.now() - gptStart
+        // const promptTokens = countTokens(command.text)
+        // const prompt = await db.insertAnswer({
+        //     userId,
+        //     chatId,
+        //     prompt: command.text,
+        //     promptTokens,
+        //     messageId: answerMessageId,
+        //     answer,
+        //     answerTokens: countTokens(answer),
+        //     gptElapsed,
+        // })
+        // // Send trailing voice memo.
+        // await telegram.indicateTyping(chatId)
+        // if (chat.send_voice) {
+        //     // Generate answer voice transcription
+        //     const { byteLength, elapsed, readable } = await tts.synthesize(
+        //         messageId,
+        //         prompt.answer,
+        //         chat.voice,
+        //     )
+        //     await Promise.all([
+        //         db.setTtsElapsed(prompt.id, elapsed),
+        //         telegram.sendVoice(
+        //             chatId,
+        //             answerMessageId,
+        //             '',
+        //             readable,
+        //             byteLength,
+        //         ),
+        //     ])
+        // }
     } else {
         // Ignore unsupported commands. They could be intended for other bots in a group chat.
         return
