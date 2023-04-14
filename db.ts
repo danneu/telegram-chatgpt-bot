@@ -5,6 +5,11 @@ import { countTokens } from './tokenizer'
 
 // Tell pg to parse numeric column as float.
 pg.types.setTypeParser(1700, (val) => Number.parseFloat(val))
+// Javascript can handle 52-bit integers from Telegram even though we store them
+// in larger types in the database.
+pg.types.setTypeParser(pg.types.builtins.INT8, (val) =>
+    Number.parseInt(val, 10),
+)
 
 const pool = new pg.Pool({
     connectionString: DATABASE_URL,

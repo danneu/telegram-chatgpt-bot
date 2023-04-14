@@ -612,7 +612,7 @@ Bot info:
             config.GPT4_ENABLED === '*' ||
             config.GPT4_ENABLED.includes(userId)
         ) {
-            const model = command.cmd === '/gpt3' ? 'gpt-3.5-turbo' : 'gpt-4'
+            const model = command.cmd === '/gpt4' ? 'gpt-4' : 'gpt-3.5-turbo'
             await db.setModel(chatId, model)
             await telegram.sendMessage(
                 chatId,
