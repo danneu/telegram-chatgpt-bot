@@ -849,7 +849,7 @@ async function handleWebhookUpdate(update: t.Update): Promise<void> {
             message.chat.username,
         )
         console.log('session', { user, chat })
-        if ((inflights[user.id] ?? 0) >= PER_USER_CONCURRENCY) {
+        if ((inflights.get(user.id) ?? 0) >= PER_USER_CONCURRENCY) {
             await telegram.sendMessage(
                 chat.id,
                 '❌ You are sending me too many simultaneous messages.',
@@ -881,7 +881,7 @@ async function handleWebhookUpdate(update: t.Update): Promise<void> {
                 console.error(err)
             })
             .finally(() => {
-                if (inflights[user.id] <= 1) {
+                if ((inflights.get(user.id) ?? 0) <= 1) {
                     inflights.delete(user.id)
                 } else {
                     inflights.set(user.id, (inflights.get(user.id) ?? 0) - 1)
