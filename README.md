@@ -1,12 +1,30 @@
 # telegram-chatgpt-bot
 
-A self-hostable Telegram bot that lets you speak with ChatGPT through text and voice memos. Notably, you can send it voice memos and it can respond with voice memos.
+A self-hostable Telegram bot that lets you speak with ChatGPT through text and voice memos.
 
 **️⚠ Hotfix** Due to popularity, the demo bot rate-limits unauthorized users after 10 messages per reboot.
 
-<div style="text-align: center">
-Demo: <a href="https://t.me/god_in_a_bot">@god_in_a_bot</a>
-</div>
+**Demo:** <a href="https://t.me/god_in_a_bot">@god_in_a_bot</a>
+
+## Table of contents
+
+<!-- toc -->
+
+-   [Screenshots](#screenshots)
+-   [Commands](#commands)
+-   [Features](#features)
+-   [Why Telegram?](#why-telegram)
+-   [Conversation context and token limit](#conversation-context-and-token-limit)
+-   [Voice memos](#voice-memos)
+-   [Cost](#cost)
+-   [Install](#install)
+-   [Configure environment variables](#configure-environment-variables)
+-   [Enable model switching](#enable-model-switching)
+-   [Simultaneous request rate-limiting](#simultaneous-request-rate-limiting)
+-   [Demo bot rate-limiting](#demo-bot-rate-limiting)
+-   [License](#license)
+
+<!-- tocstop -->
 
 ## Screenshots
 

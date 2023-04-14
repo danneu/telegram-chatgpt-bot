@@ -4,7 +4,8 @@
         "dev": "nodemon index.ts",
         "run": "ts-node index.ts",
         "db:reset": "psql -d telegram-chat-bot -f schema.sql",
-        "cftunnel": "cloudflared tunnel run chatdev"
+        "cftunnel": "cloudflared tunnel run chatdev",
+        "toc": "markdown-toc -i README.md"
     },
     "dependencies": {
         "@koa/router": "^12.0.0",
@@ -31,6 +32,7 @@
         "eslint-plugin-import": "^2.27.5",
         "eslint-plugin-n": "^15.7.0",
         "eslint-plugin-promise": "^6.1.1",
+        "markdown-toc": "^1.2.0",
         "nodemon": "^2.0.22",
         "typescript": "^5.0.4"
     }
