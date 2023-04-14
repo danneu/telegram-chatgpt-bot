@@ -230,3 +230,66 @@ export async function* streamTextCompletions(
         }
     }
 }
+
+type Status = typeof OpenAIError.Statuses[number]
+
+export class OpenAIError extends Error {
+    // message will be user-friendly error message
+    constructor(readonly status: Status) {
+        let message: string
+        switch (status) {
+            case 400:
+                message = `❌ OpenAI: Bad request. Ensure the prompt is SFW.`
+                break
+            case 429:
+                message = `❌ OpenAI: Rate-limited`
+                break
+        }
+        super(message)
+    }
+
+    // The status codes that Axios will not fail on.
+    //
+    // 429: Rate-limited
+    // 400: Bad request, usually NSFW prompt
+    static Statuses = [429, 400] as const
+
+    static isStatus(status: number): status is Status {
+        return this.Statuses.includes(status as Status)
+    }
+}
+
+// Note: urls point to png images.
+export async function dalleGenerateImages(
+    prompt: string,
+    count: number,
+): Promise<URL[]> {
+    const response = await openai.createImage(
+        {
+            prompt,
+            n: count,
+            size: '1024x1024',
+        },
+        {
+            validateStatus(status) {
+                if (status >= 200 && status < 300) {
+                    return true
+                } else if (OpenAIError.isStatus(status)) {
+                    return true
+                } else {
+                    return false
+                }
+            },
+        },
+    )
+
+    if (response.status >= 200 && response.status < 300) {
+        const body = response.data
+        const urls = body.data.map((item: any) => new URL(item.url))
+        return urls
+    } else if (OpenAIError.isStatus(response.status)) {
+        throw new OpenAIError(response.status)
+    } else {
+        throw new Error('Unhandled case')
+    }
+}

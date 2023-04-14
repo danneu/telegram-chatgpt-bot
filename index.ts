@@ -774,6 +774,47 @@ Bot info:
         } else {
             await completeAndSendAnswer(chat, messageId, prevPrompt.prompt)
         }
+    } else if (command.cmd === '/img') {
+        // HACK: Overloading canManageModel as crude authz check.
+        if (!canManageModel(userId)) {
+            await telegram.sendMessage(
+                chatId,
+                `Sorry, guests can't use this command in the demo. 😔`,
+                messageId,
+            )
+            return
+        }
+        if (command.text.length > 0) {
+            telegram.indicateTyping(chatId).catch((err) => {
+                console.error(`Error while indicating typing: ${String(err)}`)
+            })
+
+            let urls: URL[]
+            try {
+                urls = await openai.dalleGenerateImages(command.text, 1)
+            } catch (err: any) {
+                if (err instanceof openai.OpenAIError) {
+                    await telegram.sendMessage(chatId, err.message, messageId)
+                    return
+                }
+                throw err
+            }
+            // https://core.telegram.org/bots/api#sendmediagroup
+            await telegram.request('sendMediaGroup', {
+                chat_id: chatId,
+                reply_to_message_id: messageId,
+                allow_sending_without_reply: true,
+                media: JSON.stringify(
+                    urls.map((url) => ({ type: 'photo', media: url })),
+                ),
+            })
+        } else {
+            await telegram.sendMessage(
+                chatId,
+                `Usage: <code>/img a photo of a happy corgi puppy sitting and facing forward, studio light, longshot</code>`,
+                messageId,
+            )
+        }
     } else if (command.cmd === '/model') {
         if (canManageModel(userId)) {
             await telegram.request('sendMessage', {

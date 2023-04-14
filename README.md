@@ -17,8 +17,11 @@ Demo: <https://t.me/god_in_a_bot> (Only supports 1:1 private convos)
 -   `/promptclear`: Reset prompt to bot default
 -   `/model`: Change gpt model (Must configure `CAN_MANAGE_MODEL` env var for this to work)
 -   `/retry`: Regenerate last bot answer
+-   `/img <prompt>`: Generate a Dall-e image (note: unaffected by `/retry`)
 
 ## Features
+
+This bot has become somewhat of a meandering kitchen sink since I've been having fun implementing stuff for my person use.
 
 -   [x] **Two-way voice memos**. I really liked the idea of talking to ChatGPT with voice and then receiving voice responses, especially for practicing a different language.
 -   [x] **Language/voice selection**. `/voice` gives you a inline menu for quickly changing the bot's voice + language.
@@ -31,6 +34,7 @@ Demo: <https://t.me/god_in_a_bot> (Only supports 1:1 private convos)
     -   `text-davinci-003`
 -   [x] Automatically change voice/language according to user prompt language.
     -   This is implemented by repeatedly updating the message as tokens are received.
+-   [x] Dall-e image generation.
 -   [ ] Group chat support. (Still need to figure out how it should work)
 
 ## Why Telegram?
