@@ -8,7 +8,7 @@
 //
 // * = I chose these voices because they sound the best to me. Otherwise, I use the first female/male voice
 // on Azure's voice list.
-const DEFAULT_VOICES = {
+const DEFAULT_VOICES: Record<string, string[]> = {
     // Dutch
     nl: ['nl-NL-ColetteNeural', 'nl-NL-MaartenNeural'],
     // French

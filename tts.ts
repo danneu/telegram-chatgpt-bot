@@ -94,7 +94,7 @@ export async function synthesize(
 class PullStreamReadable extends Readable {
     private readonly pullStream: sdk.PullAudioOutputStream
 
-    constructor(pullStream) {
+    constructor(pullStream: sdk.PullAudioOutputStream) {
         super()
         this.pullStream = pullStream
     }
