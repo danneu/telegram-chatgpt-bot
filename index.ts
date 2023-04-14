@@ -421,7 +421,6 @@ async function processUserMessage(
     try {
         tokens = await openai.streamChatCompletions(messages, chat.temperature)
     } catch (err) {
-        // TODO: haven't tested this.
         if (err.response?.status === 429) {
             await telegram.sendMessage(
                 chatId,

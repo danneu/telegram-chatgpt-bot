@@ -35,6 +35,15 @@ export async function* streamChatCompletions(
         },
         {
             responseType: 'stream',
+            validateStatus(status) {
+                if (status >= 200 && status < 300) {
+                    return true
+                } else if (status === 429) {
+                    return true
+                } else {
+                    return false
+                }
+            },
         },
     )
 
