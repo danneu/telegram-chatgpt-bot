@@ -209,7 +209,6 @@ const VOICE_MENU: Record<string, any> = {
 
 function inlineKeyboardForModelSelect(
     model: db.Model,
-    showGpt4: boolean,
 ): Array<Array<{ text: string; callback_data: string }>> {
     const rows = [
         [
@@ -219,6 +218,16 @@ function inlineKeyboardForModelSelect(
                 } GPT-3.5 (Fastest)`,
                 callback_data: 'model:gpt-3.5-turbo',
             },
+        ],
+        [
+            {
+                text: `${
+                    model === 'gpt-4' ? '✅' : ''
+                } GPT-4 (Smarter, slower)`,
+                callback_data: 'model:gpt-4',
+            },
+        ],
+        [
             {
                 text: `${
                     model === 'text-davinci-003' ? '✅' : ''
@@ -227,17 +236,6 @@ function inlineKeyboardForModelSelect(
             },
         ],
     ]
-
-    if (showGpt4) {
-        rows.push([
-            {
-                text: `${
-                    model === 'gpt-4' ? '✅' : ''
-                } GPT-4 (Smarter, slower)`,
-                callback_data: 'model:gpt-4',
-            },
-        ])
-    }
 
     return rows
 }
@@ -293,7 +291,7 @@ async function handleCallbackQuery(
                 telegram.editMessageReplyMarkup(
                     chatId,
                     messageId,
-                    inlineKeyboardForModelSelect(model, canManageModel(userId)),
+                    inlineKeyboardForModelSelect(model),
                 ),
             ])
         }
@@ -782,10 +780,7 @@ Bot info:
                 chat_id: chatId,
                 text: 'Select an OpenAI model.',
                 reply_markup: JSON.stringify({
-                    inline_keyboard: inlineKeyboardForModelSelect(
-                        chat.model,
-                        canManageModel(userId),
-                    ),
+                    inline_keyboard: inlineKeyboardForModelSelect(chat.model),
                 }),
             })
         } else {
@@ -1073,7 +1068,8 @@ async function streamTokensToTelegram(
     let prefix = ''
     switch (model) {
         case 'gpt-3.5-turbo':
-            prefix = '<b>GPT-3.5:</b> '
+            // Hmm, too noisy for a chatbot since it's the default model.
+            // prefix = '<b>GPT-3.5:</b> '
             break
         case 'gpt-4':
             prefix = '<b>🧠 GPT-4:</b> '
