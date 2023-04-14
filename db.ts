@@ -15,13 +15,13 @@ const pool = new pg.Pool({
     connectionString: DATABASE_URL,
 })
 
-async function one(pool: pg.Pool, stmt: string, params: any[]) {
+async function one(pool: pg.Pool, stmt: string, params: any[]): Promise<any> {
     const result = await pool.query(stmt, params)
     return result.rows[0]
 }
 
-export async function clearPrompts(userId: number) {
-    return pool.query(
+export async function clearPrompts(userId: number): Promise<void> {
+    await pool.query(
         `
     delete from prompts
     where user_id = $1
@@ -51,8 +51,11 @@ export async function upsertUser(
     return user
 }
 
-export async function setVoiceResponse(chatId: number, isEnabled: boolean) {
-    return pool.query(
+export async function setVoiceResponse(
+    chatId: number,
+    isEnabled: boolean,
+): Promise<void> {
+    await pool.query(
         `
         update chats
         set send_voice = $2
@@ -65,8 +68,8 @@ export async function setVoiceResponse(chatId: number, isEnabled: boolean) {
 export async function setMasterPrompt(
     chatId: number,
     masterPrompt: string | null,
-) {
-    return pool.query(
+): Promise<void> {
+    await pool.query(
         `
         update chats
         set master_prompt = $2
@@ -81,7 +84,7 @@ export async function upsertChat(
     type: string,
     uname: string | undefined,
 ): Promise<Chat> {
-    return one(
+    return await one(
         pool,
         `insert into chats (id, type, uname)
         values ($1, $2, $3)
@@ -93,8 +96,11 @@ export async function upsertChat(
     )
 }
 
-export async function changeVoice(chatId: number, voiceCode: string) {
-    return one(
+export async function changeVoice(
+    chatId: number,
+    voiceCode: string,
+): Promise<Chat> {
+    return await one(
         pool,
         `
 update chats
@@ -106,10 +112,13 @@ returning *
     )
 }
 
-export async function setTtsElapsed(promptId: number, elapsed: number) {
+export async function setTtsElapsed(
+    promptId: number,
+    elapsed: number,
+): Promise<void> {
     assert(Number.isInteger(promptId))
     assert(Number.isInteger(elapsed))
-    return pool.query(
+    await pool.query(
         `
     update prompts
     set tts_elapsed = $2
@@ -137,8 +146,8 @@ export async function insertAnswer({
     promptTokens: number
     answerTokens: number
     gptElapsed: number | undefined
-}) {
-    return one(
+}): Promise<Prompt> {
+    return await one(
         pool,
         `
     insert into prompts (chat_id, user_id, prompt, message_id, answer, prompt_tokens, answer_tokens, gpt_elapsed)
@@ -162,8 +171,8 @@ export async function insertAnswer({
 export async function setModel(
     chatId: number,
     model: 'gpt-3.5-turbo' | 'gpt-4',
-) {
-    return pool.query(
+): Promise<void> {
+    await pool.query(
         `
     update chats
     set model = $2
@@ -173,12 +182,15 @@ export async function setModel(
     )
 }
 
-export async function setTemperature(chatId: number, temperature: number) {
+export async function setTemperature(
+    chatId: number,
+    temperature: number,
+): Promise<void> {
     assert(
-        0 <= temperature && temperature <= 1.0,
+        temperature >= 0 && temperature <= 1.0,
         'temp must be in range [0, 1]',
     )
-    return pool.query(
+    await pool.query(
         `
     update chats
     set temperature = $2
@@ -193,7 +205,7 @@ export async function listHistory(
     chatId: number,
     systemPrompt: string,
     userPrompt: string,
-) {
+): Promise<Message[]> {
     const { rows }: { rows: Prompt[] } = await pool.query(
         `
         select * from prompts
@@ -213,7 +225,7 @@ export async function listHistory(
         4096 - 512 - countTokens(systemPrompt) - countTokens(userPrompt)
 
     // Reminder: The messages will get reversed at the end.
-    let output: Message[] = [{ role: 'user', content: userPrompt }]
+    const output: Message[] = [{ role: 'user', content: userPrompt }]
 
     for (const row of rows) {
         if (budget - row.answer_tokens < 0) {
@@ -244,11 +256,11 @@ export async function listHistory(
     return output.reverse()
 }
 
-////////////////////////////////////////////////////////////
+// =========================================================
 // DB types
-////////////////////////////////////////////////////////////
+// =========================================================
 
-export type Prompt = {
+export interface Prompt {
     id: number
     prompt: string
     prompt_tokens: number
@@ -256,18 +268,18 @@ export type Prompt = {
     answer_tokens: number
 }
 
-export type Message = {
+export interface Message {
     role: 'system' | 'assistant' | 'user'
     content: string
 }
 
-export type User = {
+export interface User {
     id: number
     uname: string
     lang: string | undefined
 }
 
-export type Chat = {
+export interface Chat {
     id: number
     type: 'private' | 'group' | 'supergroup' | 'channel'
     model: 'gpt-3.5-turbo' | 'gpt-4'
