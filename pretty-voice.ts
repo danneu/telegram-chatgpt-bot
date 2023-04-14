@@ -1,6 +1,6 @@
 // Extracted from Azure's voice list:
 // https://learn.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support?tabs=tts
-const LOCALES = {
+const LOCALES: Record<string, string> = {
     'af-ZA': 'Afrikaans (South Africa)',
     'am-ET': 'Amharic (Ethiopia)',
     'ar-AE': 'Arabic (United Arab Emirates)',
@@ -159,9 +159,9 @@ const VOICE_REGEX =
 //     prettyVoice('lol') === 'Unknown'
 //     prettyVoice('xx-XX-Foo') === 'Foo (Unknown)'
 //     prettyVoice('zh-CN-henan-Foo') === 'Foo - Chinese (Zhongyuan Mandarin Henan, Simplified)'
-export default function prettyVoice(code: string) {
+export default function prettyVoice(code: string): string {
     const match = code.match(VOICE_REGEX)
-    if (!match) return 'Unknown'
+    if (match?.groups == null) return 'Unknown'
     const { locale, name } = match.groups
-    return `${name} - ${LOCALES[locale] || locale}`
+    return `${name} - ${LOCALES[locale] ?? locale}`
 }

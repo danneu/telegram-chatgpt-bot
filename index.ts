@@ -23,9 +23,10 @@ let botUsername = ''
 
 const PER_USER_CONCURRENCY = 3
 // Mapping of user_id to the number of requests they have in flight.
-const inflights: { [key: number]: number } = {}
+// const inflights: Record<number, number> = {}
+const inflights = new Map<number, number>()
 
-async function initializeBot() {
+async function initializeBot(): Promise<void> {
     // https://core.telegram.org/bots/api#authorizing-your-bot
     // Check if webhook: https://core.telegram.org/bots/api#getwebhookinfo
     const webhookInfo = await telegram.getWebhookInfo()
@@ -77,7 +78,7 @@ async function initializeBot() {
     ]
 
     // Don't broadcast /gpt commands unless user has a choice.
-    if (config.GPT4_ENABLED) {
+    if (config.GPT4_ENABLED !== undefined) {
         commands.push({
             command: 'gpt3',
             description: 'use gpt-3.5-turbo model',
@@ -91,9 +92,7 @@ async function initializeBot() {
     await telegram.setMyCommands(commands)
 }
 
-////////////////////////////////////////////////////////////
 // SERVER
-////////////////////////////////////////////////////////////
 
 const app = new Koa()
 app.use(logger())
@@ -112,7 +111,7 @@ async function transcribeOggStream(input: Readable): Promise<string> {
         console.log('Error on ogg input stream:', err)
     })
 
-    return new Promise(async (resolve, reject) => {
+    return await new Promise((resolve, reject) => {
         try {
             const args = ['-f', 'ogg', '-i', 'pipe:0', '-f', 'mp3', 'pipe:1']
             const proc = spawn('ffmpeg', args, {
@@ -129,8 +128,10 @@ async function transcribeOggStream(input: Readable): Promise<string> {
             })
 
             proc.on('exit', (code, signal) => {
-                if (code) {
-                    const errorMsg = `ffmpeg exited with code ${code} and signal ${signal}`
+                if (typeof code === 'number' && code !== 0) {
+                    const errorMsg = `ffmpeg exited with code ${code} and signal ${String(
+                        signal,
+                    )}`
                     console.error(errorMsg)
                     reject(new Error(errorMsg))
                 }
@@ -138,8 +139,12 @@ async function transcribeOggStream(input: Readable): Promise<string> {
                 proc.stdin.destroy()
             })
 
-            const result = await openai.transcribeAudio(proc.stdout)
-            resolve(result.data.text)
+            openai
+                .transcribeAudio(proc.stdout)
+                .then((result) => {
+                    resolve(result.data.text)
+                })
+                .catch(resolve)
         } catch (err) {
             console.error('transcribe error:', err)
             reject(err)
@@ -153,7 +158,7 @@ async function transcribeOggStream(input: Readable): Promise<string> {
 //
 //
 // Note: Always have an even number of voices per country.
-const VOICE_MENU: { [key: string]: any } = {
+const VOICE_MENU: Record<string, any> = {
     English: {
         US: {
             Jenny: 'en-US-JennyNeural',
@@ -220,7 +225,7 @@ async function handleCallbackQuery(
     messageId: number,
     callbackQueryId: string,
     callbackData: string,
-) {
+): Promise<void> {
     // https://core.telegram.org/bots/api#inlinekeyboardmarkup
     // const chatId = body.message.chat.id
     // const messageId = body.message.message_id
@@ -300,7 +305,7 @@ async function handleCallbackQuery(
                     ],
                 ].concat(
                     util
-                        .chunksOf(
+                        .chunksOf<[string, string]>(
                             2,
                             Object.entries(
                                 VOICE_MENU[segments[1]][segments[2]],
@@ -327,18 +332,16 @@ async function handleCallbackQuery(
             }
             return
         // voice:English:US:en-US-JennyNeural --> Pick this voice
-        case 4:
-            {
-                const newVoice = segments[3]
-                await db.changeVoice(chatId, newVoice)
-                // https://core.telegram.org/bots/api#answercallbackquery
-                await telegram.answerCallbackQuery(
-                    callbackQueryId,
-                    `✅ Voice changed to ${newVoice}`,
-                )
-                await telegram.deleteMessage(chatId, messageId)
-            }
-            return
+        case 4: {
+            const newVoice = segments[3]
+            await db.changeVoice(chatId, newVoice)
+            // https://core.telegram.org/bots/api#answercallbackquery
+            await telegram.answerCallbackQuery(
+                callbackQueryId,
+                `✅ Voice changed to ${newVoice}`,
+            )
+            await telegram.deleteMessage(chatId, messageId)
+        }
     }
 }
 
@@ -347,19 +350,24 @@ async function processUserMessage(
     user: db.User,
     chat: db.Chat,
     message: t.Message,
-) {
+): Promise<void> {
     console.log(`[processUserMessage]`, user, chat, message)
 
     // TODO: This does happen, so figure out when this case happens and handle it.
     // I've seen it happen in group chats, maybe when adding the bot or something.
-    if (!message.text && !message.voice) {
+    if (message.text === undefined && message.voice === undefined) {
         console.log('TODO: message had no .text nor .voice. Skipping...')
         return
     }
 
     // Reject messages from groups until they are deliberately supported.
-    if (message.chat.type !== 'private') {
+    if (message.chat?.type !== 'private') {
         console.log('rejecting non-private chat')
+        return
+    }
+
+    if (message.from === undefined) {
+        // Message must have `from` property by now.
         return
     }
 
@@ -370,7 +378,7 @@ async function processUserMessage(
 
     // Check if voice and transcribe it
     // Only possible in private chats
-    if (message.voice) {
+    if (message.voice !== undefined) {
         await telegram.indicateTyping(chatId)
 
         const remoteFileUrl = await telegram.getFileUrl(message.voice.file_id)
@@ -380,11 +388,11 @@ async function processUserMessage(
                 `Error fetching telegram .ogg file. ${response.status} ${response.statusText}`,
             )
         }
-        //@ts-expect-error
+        // @ts-expect-error: Not sure how to annotate response.body
         userText = await transcribeOggStream(Readable.fromWeb(response.body))
 
         // Send transcription to user so they know how the bot interpreted their memo.
-        if (userText) {
+        if (userText.length > 0) {
             await telegram.sendMessage(
                 chatId,
                 `(Transcription) <i>${userText}</i>`,
@@ -404,9 +412,14 @@ async function processUserMessage(
         await telegram.indicateTyping(chatId)
     }
 
+    if (userText === undefined) {
+        // userText was either populated by message.text or message.voice transcription.
+        return
+    }
+
     // Check if command and short-circuit
     const command = parseCommand(userText)
-    if (command) {
+    if (command !== undefined) {
         await handleCommand(user.id, chat, messageId, command)
         return
     }
@@ -416,7 +429,9 @@ async function processUserMessage(
     // Fetch chatgpt completion
     const messages = await db.listHistory(
         chatId,
-        chat.master_prompt || config.MASTER_PROMPT,
+        typeof chat.master_prompt === 'string' && chat.master_prompt.length > 0
+            ? chat.master_prompt
+            : config.MASTER_PROMPT,
         userText,
     )
 
@@ -439,7 +454,7 @@ async function processUserMessage(
     const gptStart = Date.now()
     let tokens
     try {
-        tokens = await openai.streamChatCompletions(
+        tokens = openai.streamChatCompletions(
             messages,
             chat.model,
             chat.temperature,
@@ -486,15 +501,18 @@ async function processUserMessage(
 
     // Send trailing voice memo.
     if (chat.send_voice) {
-        telegram.indicateTyping(chatId) // Don't await
+        telegram
+            .indicateTyping(chatId) // Don't await
+            .catch((err) => {
+                console.error(`Failed to indicate typing: ${String(err)}`)
+            })
 
         // Determine if there's a likely mismatch with bot response
         const languageResult = await openai.detectLanguage(answer)
-        let finalVoice = chat.voice
-        console.log({ languageResult })
+        let finalVoice = chat.voice ?? voz.DEFAULT_VOICE
         if (languageResult.kind === 'success') {
             const voice = voz.voiceFromLanguageCode(languageResult.code)
-            if (voice && voice !== chat.voice) {
+            if (voice !== undefined && voice !== chat.voice) {
                 console.log('Changing voice to', voice)
                 finalVoice = voice
             } else {
@@ -531,12 +549,12 @@ type Command =
 function parseCommand(input: string): Command | undefined {
     const re = /^(\/[a-zA-Z0-9]+)(?:@([a-zA-Z0-9_]+))?(?:[ ]+(.*))?$/
     const match = input.trim().match(re)
-    if (!match) return
-    const [_, cmd, uname, text] = match
-    if (uname) {
-        return { type: 'scoped', uname, cmd, text: text || '' }
+    if (match === null) return
+    const [, cmd, uname, text] = match
+    if (typeof uname === 'string') {
+        return { type: 'scoped', uname, cmd, text: text ?? '' }
     } else {
-        return { type: 'anon', cmd, text: text || '' }
+        return { type: 'anon', cmd, text: text ?? '' }
     }
 }
 
@@ -549,7 +567,7 @@ async function handleCommand(
     chat: db.Chat,
     messageId: number,
     command: Command,
-) {
+): Promise<void> {
     const chatId = chat.id
 
     if (command.type === 'scoped' && command.uname !== botUsername) {
@@ -560,7 +578,7 @@ async function handleCommand(
     // Check if command and short-circuit
     if (command.cmd === '/start') {
         await telegram.indicateTyping(chatId)
-        return telegram.sendMessage(
+        await telegram.sendMessage(
             chatId,
             `🎉 Hello! I'm an AI chatbot powered by ChatGPT.\n\nGo ahead and ask me something in a variety of languages. I even understand voice memos. 🎤\n\nNote: Only one-on-one private chats are supported at the moment.\n\nHelp wanted! Source code: https://github.com/danneu/telegram-chatgpt-bot`,
         )
@@ -568,7 +586,6 @@ async function handleCommand(
         await telegram.indicateTyping(chatId)
         await db.clearPrompts(chatId)
         await telegram.sendMessage(chatId, '✅ Context cleared.', messageId)
-        return
     } else if (command.cmd === '/promptclear') {
         await db.setMasterPrompt(chatId, null)
         await telegram.sendMessage(
@@ -576,7 +593,6 @@ async function handleCommand(
             '✅ Custom system prompt cleared.',
             messageId,
         )
-        return
     } else if (command.cmd === '/prompt') {
         if (command.text.length === 0) {
             await telegram.sendMessage(
@@ -584,7 +600,6 @@ async function handleCommand(
                 'Usage: <code>/prompt This is the new master prompt</code>',
                 messageId,
             )
-            return
         } else {
             await db.setMasterPrompt(chatId, command.text)
             await telegram.sendMessage(
@@ -592,7 +607,6 @@ async function handleCommand(
                 '✅ Master prompt updated.\n\nTo see changes: /clear context',
                 messageId,
             )
-            return
         }
     } else if (command.cmd === '/info') {
         await telegram.sendMessage(
@@ -601,14 +615,13 @@ async function handleCommand(
 Bot info:
 
 - Model: ${chat.model}
-- Voice: ${prettyVoice(chat.voice) || '--'} 
+- Voice: ${prettyVoice(chat.voice ?? voz.DEFAULT_VOICE) ?? '--'} 
 - Voice responses: ${chat.send_voice ? '🔊 On' : '🔇 Off'}
 - Temperature: ${chat.temperature.toFixed(1)}
-- Master prompt: ${chat.master_prompt || '(Bot default)'}
+- Master prompt: ${chat.master_prompt ?? '(Bot default)'}
         `.trim(),
             messageId,
         )
-        return
     } else if (command.cmd === '/voiceon') {
         await Promise.all([
             telegram.indicateTyping(chatId),
@@ -619,7 +632,6 @@ Bot info:
             '🔊 Bot voice responses enabled.',
             messageId,
         )
-        return
     } else if (command.cmd === '/voiceoff') {
         await Promise.all([
             telegram.indicateTyping(chatId),
@@ -630,7 +642,6 @@ Bot info:
             '🔇 Bot voice responses disabled.',
             messageId,
         )
-        return
     } else if (command.cmd === '/whoami') {
         // Tell me my Telegram ID
         await telegram.sendMessage(
@@ -638,11 +649,11 @@ Bot info:
             `Your Telegram ID is ${userId}.`,
             messageId,
         )
-        return
     } else if (['/gpt3', '/gpt4'].includes(command.cmd)) {
         if (
             config.GPT4_ENABLED === '*' ||
-            config.GPT4_ENABLED.includes(userId)
+            (Array.isArray(config.GPT4_ENABLED) &&
+                config.GPT4_ENABLED.includes(userId))
         ) {
             const model = command.cmd === '/gpt4' ? 'gpt-4' : 'gpt-3.5-turbo'
             await db.setModel(chatId, model)
@@ -651,14 +662,12 @@ Bot info:
                 `Using model ${model}`,
                 messageId,
             )
-            return
         } else {
             await telegram.sendMessage(
                 chatId,
                 `Sorry, you don't have permission to use GPT-4.`,
                 messageId,
             )
-            return
         }
     } else if (command.cmd === '/temp') {
         await telegram.indicateTyping(chatId)
@@ -680,11 +689,8 @@ Bot info:
                 ],
             }),
         })
-        return
     } else if (command.cmd === '/voice') {
         await telegram.indicateTyping(chatId)
-        const url = `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/sendMessage`
-
         const langs = Object.keys(VOICE_MENU)
         const inlineKeyboard = util.chunksOf(2, langs).map((chunk) => {
             return chunk.map((lang) => {
@@ -694,17 +700,16 @@ Bot info:
                 }
             })
         })
-        const response = await telegram.request('sendMessage', {
+        await telegram.request('sendMessage', {
             chat_id: chatId,
             text: `Select a voice/language for the bot's text-to-speech voice memos.`,
             reply_markup: JSON.stringify({
                 inline_keyboard: inlineKeyboard,
             }),
         })
-        console.log(
-            `POST ${url} -> ${response.status} ${await response.text()}`,
-        )
-        return
+        // console.log(
+        //     `POST ${url} -> ${response.status} ${await response.text()}`,
+        // )
     } else if (command.cmd === '/voices') {
         await telegram.indicateTyping(chatId)
         await telegram.sendMessage(
@@ -713,11 +718,10 @@ Bot info:
             
 For example, <code>/voice en-US-AriaNeural</code>`,
         )
-        return
-    } else if (command.cmd === '/voice' && command.text) {
+    } else if (command.cmd === '/voice' && command.text.length > 0) {
         await telegram.indicateTyping(chatId)
         const voiceCode = command.text
-        if (/[a-z]{2}\-[A-Z]{2}-[a-zA-Z0-0]+/.test(voiceCode)) {
+        if (/[a-z]{2}-[A-Z]{2}-[a-zA-Z0-0]+/.test(voiceCode)) {
             await db.changeVoice(chatId, voiceCode)
         } else {
             await telegram.sendMessage(
@@ -725,9 +729,7 @@ For example, <code>/voice en-US-AriaNeural</code>`,
                 'The voice name should look something like "en-US-AmberNeural" or "es-MX-CandelaNeural".',
             )
         }
-        return
-    } else if (command.cmd === '/ai' && command.text) {
-        return
+    } else if (command.cmd === '/ai' && command.text.length > 0) {
         // await telegram.indicateTyping(chatId)
         // // TODO: For group chats, consider chat history from all users, not just from userId
         // const history = await db.listHistory(chatId)
@@ -788,7 +790,6 @@ For example, <code>/voice en-US-AriaNeural</code>`,
         // }
     } else {
         // Ignore unsupported commands. They could be intended for other bots in a group chat.
-        return
     }
 }
 
@@ -798,37 +799,47 @@ async function handleGroupMessage(
     userId: number,
     chat: db.Chat,
     message: t.Message,
-) {
-    const command = parseCommand(message.text)
-    if (command) {
-        await handleCommand(userId, chat, message.message_id, command)
+): Promise<void> {
+    if (message.text === undefined) {
         return
+    }
+    const command = parseCommand(message.text)
+    if (command !== undefined) {
+        await handleCommand(userId, chat, message.message_id, command)
     }
 }
 
-async function handleWebhookUpdate(update: t.Update) {
+async function handleWebhookUpdate(update: t.Update): Promise<void> {
     if ('message' in update) {
         const message = update.message
+
+        if (message.from === undefined) {
+            return
+        }
+        if (message.chat === undefined) {
+            return
+        }
+
         const user = await db.upsertUser(
             message.from.id,
             message.from.username,
             message.from.language_code,
         )
         const chat = await db.upsertChat(
-            message.chat!.id,
-            message.chat!.type,
-            message.chat!.username,
+            message.chat.id,
+            message.chat.type,
+            message.chat.username,
         )
         console.log('session', { user, chat })
-        if ((inflights[user.id] || 0) >= PER_USER_CONCURRENCY) {
-            telegram.sendMessage(
+        if ((inflights[user.id] ?? 0) >= PER_USER_CONCURRENCY) {
+            await telegram.sendMessage(
                 chat.id,
                 '❌ You are sending me too many simultaneous messages.',
                 message.message_id,
             )
             return
         } else {
-            inflights[user.id] = (inflights[user.id] || 0) + 1
+            inflights.set(user.id, (inflights.get(user.id) ?? 0) + 1)
         }
 
         // We handle private chats and group chats here.
@@ -840,9 +851,9 @@ async function handleWebhookUpdate(update: t.Update) {
         }
 
         await promise
-            .catch((err) => {
+            .catch(async (err: any) => {
                 console.error(err)
-                return telegram.sendMessage(
+                return await telegram.sendMessage(
                     chat.id,
                     '❌ Something went wrong and the bot could not respond to your message. Try again soon?',
                     message.message_id,
@@ -853,13 +864,20 @@ async function handleWebhookUpdate(update: t.Update) {
             })
             .finally(() => {
                 if (inflights[user.id] <= 1) {
-                    delete inflights[user.id]
+                    inflights.delete(user.id)
                 } else {
-                    inflights[user.id] -= 1
+                    inflights.set(user.id, (inflights.get(user.id) ?? 0) - 1)
                 }
             })
-        return
     } else if ('callback_query' in update) {
+        if (
+            update.callback_query.message === undefined ||
+            update.callback_query.message.chat === undefined ||
+            typeof update.callback_query.data !== 'string'
+        ) {
+            return
+        }
+
         const chatId = update.callback_query.message.chat.id
         const messageId = update.callback_query.message.message_id
         const callbackQueryId = update.callback_query.id
@@ -869,18 +887,16 @@ async function handleWebhookUpdate(update: t.Update) {
             messageId,
             callbackQueryId,
             callbackData,
-        ).catch((err) => {
+        ).catch(async (err) => {
             console.error(err)
-            telegram.sendMessage(
-                update.callback_query.message.chat!.id,
+            return await telegram.sendMessage(
+                chatId,
                 '❌ Something went wrong and the bot could not respond to your message. Try again soon?',
-                update.callback_query.message!.message_id,
+                messageId,
             )
         })
-        return
     } else {
         console.log('unhandled webhook update:', update)
-        return
     }
 }
 
@@ -936,14 +952,14 @@ async function streamTokensToTelegram(
     const prefix = model === 'gpt-4' ? '(GPT-4) ' : ''
 
     // Call after prevId is set.
-    async function editLoop() {
+    function editLoop(): void {
         if (isFinished) {
             return
         }
-        if (sentBuf !== buf) {
+        if (typeof prevId === 'number' && sentBuf !== buf) {
             sentBuf = buf
-            await telegram
-                .editMessageText(chatId, prevId!, prefix + buf + cursor)
+            telegram
+                .editMessageText(chatId, prevId, prefix + buf + cursor)
                 .catch((err) => {
                     // Don't crash on error
                     console.error(err)
@@ -956,7 +972,7 @@ async function streamTokensToTelegram(
         for await (const token of tokenIterator) {
             tokenCount++
             buf += token
-            if (!prevId) {
+            if (typeof prevId !== 'number') {
                 prevId = await telegram
                     .sendMessage(chatId, prefix + cursor, initMessageId)
                     .then((msg) => msg.message_id)
@@ -974,12 +990,16 @@ async function streamTokensToTelegram(
 
     isFinished = true // Stop the send loop from continuing.
 
+    if (prevId === undefined) {
+        throw new Error('Impossible: prevId remains undefined. (bug)')
+    }
+
     // One final send, also removes the cursor.
-    await telegram.editMessageText(chatId, prevId!, prefix + buf)
+    await telegram.editMessageText(chatId, prevId, prefix + buf)
 
     return {
         answer: buf,
-        messageId: prevId!,
+        messageId: prevId,
         tokenCount,
     }
 }

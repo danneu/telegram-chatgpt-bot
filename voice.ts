@@ -38,9 +38,11 @@ const DEFAULT_VOICES = {
     ko: ['ko-KR-JiMinNeural', 'ko-KR-BongJinNeural'],
 }
 
-export function voiceFromLanguageCode(code: string) {
+export const DEFAULT_VOICE = DEFAULT_VOICES.en[0]
+
+export function voiceFromLanguageCode(code: string): string | undefined {
     const match = DEFAULT_VOICES[code.toLowerCase()]
-    if (!match) return
-    const [female, male] = match
+    if (match === undefined) return
+    const [female] = match
     return female
 }

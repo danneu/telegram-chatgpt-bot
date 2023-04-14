@@ -1,8 +1,13 @@
-import { Configuration, OpenAIApi } from 'openai'
-import { OPENAI_API_KEY, MASTER_PROMPT } from './config'
-import { Readable } from 'stream'
+import {
+    Configuration,
+    type CreateTranslationResponse,
+    OpenAIApi,
+} from 'openai'
+import { OPENAI_API_KEY } from './config'
+import { type Readable } from 'stream'
 import * as util from './util'
-import * as db from './db'
+import type * as db from './db'
+import { type AxiosResponse } from 'axios'
 
 const openai = new OpenAIApi(
     new Configuration({
@@ -13,13 +18,14 @@ const openai = new OpenAIApi(
 // stream should be an mp3 audio stream.
 //
 // https://github.com/openai/openai-node/issues/77
-export async function transcribeAudio(mp3Stream: Readable) {
-    // Library rejects our stream unless it has path property.
+export async function transcribeAudio(
+    mp3Stream: Readable,
+): Promise<AxiosResponse<CreateTranslationResponse, any>> {
     // Note: fs.createReadStream(path) has a path property which is how I figured this out.
-    //@ts-expect-error
+    // @ts-expect-error: Library rejects our stream unless it has path property.
     mp3Stream.path = 'upload.mp3'
-    //@ts-expect-error
-    return openai.createTranscription(mp3Stream, 'whisper-1')
+    // @ts-expect-error: Readable not assignable to File argument
+    return await openai.createTranscription(mp3Stream, 'whisper-1')
 }
 
 export async function* streamChatCompletions(
@@ -48,7 +54,7 @@ export async function* streamChatCompletions(
         },
     )
 
-    //@ts-expect-error
+    // @ts-expect-error: Not sure how to annotate the fact that data is async iterator.
     for await (const chunk of response.data) {
         const lines = chunk
             .toString('utf8')
@@ -63,7 +69,7 @@ export async function* streamChatCompletions(
 
             const json = JSON.parse(message)
             const token = json.choices[0].delta.content
-            if (token) {
+            if (typeof token === 'string' && token.length > 0) {
                 yield token
             }
         }
@@ -103,12 +109,12 @@ module.exports.fetchChatResponse = async function (
 
     // TODO: On error, print axios error.data which will contain the error message.
 
-    console.log(
-        `[fetchChatResponse] (${Date.now() - start}ms) chatgpt response: ${
-            response.data.choices[0].message.content.length
-        } chars..`,
-        response.data.usage,
-    )
+    // console.log(
+    //     `[fetchChatResponse] (${Date.now() - start}ms) chatgpt response: ${
+    //         response.data.choices[0].message.content.length
+    //     } chars..`,
+    //     response.data.usage,
+    // )
 
     return {
         response,
@@ -125,9 +131,7 @@ type LanguageResult =
 // it's only used on ChatGPT answers.
 const prompt = `Determine the two-letter ISO 639-1 language code for the following text. If you recognize the language, respond with the two-letter code (e.g., "en" for English, "es" for Spanish) and NOTHING else. If you don't recognize the language, respond with a "?". The text: `
 
-export async function detectLanguage(
-    text: string,
-): Promise<LanguageResult | undefined> {
+export async function detectLanguage(text: string): Promise<LanguageResult> {
     const substring = util.splitTake(300, text)
     const fullPrompt = prompt + '```' + substring + '```'
     const response = await openai.createChatCompletion(
@@ -143,14 +147,13 @@ export async function detectLanguage(
             },
         },
     )
-    console.log(`[detectLanguage] <-- response returned`)
     if (response.status !== 200) {
         return {
             kind: 'error',
             error: `OpenAI API had non-ok response: ${response.status} ${response.statusText}`,
         }
     }
-    const answer = await response.data.choices[0].message.content
+    const answer = response.data?.choices[0].message?.content ?? ''
     if (answer === '?') {
         return { kind: 'unknown' }
     } else if (answer.length === 2) {

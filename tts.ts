@@ -26,13 +26,13 @@ export async function synthesize(
     const pullStream = sdk.PullAudioOutputStream.createPullStream()
     const audioConfig = sdk.AudioConfig.fromStreamOutput(pullStream)
 
-    let synthesizer = new sdk.SpeechSynthesizer(speechConfig, audioConfig)
+    const synthesizer = new sdk.SpeechSynthesizer(speechConfig, audioConfig)
 
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
         const start = Date.now()
         synthesizer.speakTextAsync(
             text,
-            async (result) => {
+            (result) => {
                 synthesizer.close()
                 console.log(
                     `[synthesize] synthesize response received after ${
@@ -45,7 +45,8 @@ export async function synthesize(
                 ) {
                     const readable = new PullStreamReadable(pullStream)
                     resolve({
-                        //@ts-expect-error
+                        // @ts-expect-error: privAudioData is private but I need it until
+                        // I can figure out how to upload FormData stream without knowing size.
                         byteLength: result.privAudioData.byteLength,
                         elapsed: Date.now() - start,
                         readable,
@@ -73,32 +74,32 @@ export async function synthesize(
     })
 }
 
-async function readDataFromPullStream(pullStream) {
-    const data = []
-    const buffer = new ArrayBuffer(1024)
-    let bytesRead
+// async function readDataFromPullStream(pullStream): Uint8Array {
+//     const data = []
+//     const buffer = new ArrayBuffer(1024)
+//     let bytesRead
 
-    do {
-        bytesRead = await pullStream.read(buffer)
-        if (bytesRead > 0) {
-            data.push(new Uint8Array(buffer.slice(0, bytesRead)))
-        }
-    } while (bytesRead > 0)
+//     do {
+//         bytesRead = await pullStream.read(buffer)
+//         if (bytesRead > 0) {
+//             data.push(new Uint8Array(buffer.slice(0, bytesRead)))
+//         }
+//     } while (bytesRead > 0)
 
-    return new Uint8Array([].concat(...data))
-}
+//     return new Uint8Array([].concat(...data))
+// }
 
 // Wrap Azure sdk's pull stream with a Node Readable stream so we
 // can use it elsewhere, like in `fetch`.
 class PullStreamReadable extends Readable {
-    private pullStream: sdk.PullAudioOutputStream
+    private readonly pullStream: sdk.PullAudioOutputStream
 
     constructor(pullStream) {
         super()
         this.pullStream = pullStream
     }
 
-    async _read(size: number) {
+    async _read(size: number): Promise<void> {
         const buffer = new ArrayBuffer(size)
         const bytesRead = await this.pullStream.read(buffer)
 
