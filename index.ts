@@ -1042,9 +1042,20 @@ async function streamTokensToTelegram(
             sentBuf = buf
             telegram
                 .editMessageText(chatId, prevId, prefix + buf + cursor)
-                .catch((err) => {
+                .catch((err: t.TelegramResponseError) => {
                     // Don't crash on error
                     console.error(err)
+                    if (err.status === 429) {
+                        return telegram
+                            .sendMessage(
+                                chatId,
+                                '❌ Rate-limited by Telegram while editing message. Try again soon.',
+                            )
+                            .catch((err) => {
+                                console.error(err)
+                            })
+                    }
+                    isFinished = true
                 })
         }
         setTimeout(editLoop, 1000)

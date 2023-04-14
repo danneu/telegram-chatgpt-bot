@@ -4,6 +4,12 @@ import { type Readable } from 'stream'
 // A minimal Telegram bot client that implements only the methods and options
 // that I need.
 
+export class TelegramResponseError extends Error {
+    constructor(message: string, readonly status: number) {
+        super(message)
+    }
+}
+
 export class TelegramClient {
     readonly token: string
 
@@ -30,8 +36,10 @@ export class TelegramClient {
         })
 
         if (response.status !== 200) {
-            const err = new Error('Telegram API non-200 response')
-            // err.response = response
+            const err = new TelegramResponseError(
+                'Telegram API non-200 response',
+                response.status,
+            )
             const body = await response.json()
 
             console.error(
