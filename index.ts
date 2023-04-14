@@ -24,6 +24,9 @@ let botUsername = ''
 const PER_USER_CONCURRENCY = 3
 // Mapping of user_id to the number of requests they have in flight.
 const inflights = new Map<number, number>()
+// In-memory mapping of user_id to number of OpenAI prompts (i.e. text and /img) they've incurred.
+// Used as a crude rate limiter for the demo bot.
+const promptCounts = new Map<number, number>()
 
 async function initializeBot(): Promise<void> {
     // https://core.telegram.org/bots/api#authorizing-your-bot
@@ -406,6 +409,22 @@ async function processUserMessage(
     message: t.Message,
 ): Promise<void> {
     console.log(`[processUserMessage]`, user, chat, message)
+
+    // Crude demo bot rate limit.
+    // Only rate-limit guests.
+    // HACK: Overloading canManageModel as an authz check.
+    if (!canManageModel(user.id)) {
+        const promptLimit = 10
+        promptCounts.set(user.id, (promptCounts.get(user.id) ?? 0) + 1)
+        if ((promptCounts.get(user.id) ?? 0) >= promptLimit) {
+            await telegram.sendMessage(
+                chat.id,
+                '❌ You have reached the maximum number of prompts on the demo bot.\n\nIf you like this bot, you can host your own: https://github.com/danneu/telegram-chatgpt-bot',
+                message.message_id,
+            )
+            return
+        }
+    }
 
     // TODO: This does happen, so figure out when this case happens and handle it.
     // I've seen it happen in group chats, maybe when adding the bot or something.
@@ -988,9 +1007,10 @@ async function handleWebhookUpdate(update: t.Update): Promise<void> {
         let promise = Promise.resolve()
         if (chat.type === 'private') {
             promise = processUserMessage(user, chat, message)
-        } else if (chat.type === 'group') {
-            promise = handleGroupMessage(user.id, chat, message)
         }
+        // else if (chat.type === 'group') {
+        //     promise = handleGroupMessage(user.id, chat, message)
+        // }
 
         await promise
             .catch((err: any) => {
@@ -1136,7 +1156,7 @@ async function streamTokensToTelegram(
                         return telegram
                             .sendMessage(
                                 chatId,
-                                '❌ Rate-limited by Telegram while editing message. Try again soon.',
+                                '❌ Telegram: Rate-limited while editing message. Try again soon.',
                             )
                             .catch((err) => {
                                 console.error(err)

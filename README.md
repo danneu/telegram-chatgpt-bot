@@ -2,7 +2,9 @@
 
 A self-hostable Telegram bot that lets you speak with ChatGPT through text and voice memos. Notably, you can send it voice memos and it can respond with voice memos.
 
-Demo: <https://t.me/god_in_a_bot> (Only supports 1:1 private convos)
+**️⚠ Hotfix** Due to popularity, the demo bot rate-limits unauthorized users after 10 messages per reboot.
+
+Demo bot: <https://t.me/god_in_a_bot> (Only supports 1:1 private convos)
 
 ![screenshot](demo.png)
 
@@ -143,11 +145,19 @@ CAN_MANAGE_MODEL="*" # Anyone can set /model
 
 You can send the bot `/whoami` to get your Telegram ID.
 
-## Rate-limiting
+## Simultaneous request rate-limiting
 
 It's useful to be able to ask the bot multiple questions at a time since it takes the bot a while to respond.
 
 However, there's a naive in-process check to prevent a user from having more than three inflight requests at once.
+
+## Demo bot rate-limiting
+
+Due to popularity, I added a crude measure that rate-limits guests (i.e. users not approved by the `CAN_MANAGE_MODEL` env var) after 10 messages per reboot.
+
+Until I hash out a better system, if you run the bot yourself, you must configure `CAN_MANAGE_MODEL` to avoid the rate-limit.
+
+I don't intend to use `CAN_MANAGE_MODEL` as a global whitelist, but it's a quick hack.
 
 ## License
 
