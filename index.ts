@@ -756,11 +756,14 @@ async function handleWebhookUpdate(update: t.Update) {
         await promise
             .catch((err) => {
                 console.error(err)
-                telegram.sendMessage(
+                return telegram.sendMessage(
                     chat.id,
                     '❌ Something went wrong and the bot could not respond to your message. Try again soon?',
                     message.message_id,
                 )
+            })
+            .catch((err) => {
+                console.error(err)
             })
             .finally(() => {
                 if (inflights[user.id] <= 1) {
