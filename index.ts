@@ -860,17 +860,23 @@ async function streamTokensToTelegram(
         setTimeout(editLoop, 1000)
     }
 
-    for await (const token of tokenIterator) {
-        buf += token
-        if (!prevId) {
-            prevId = await telegram
-                .sendMessage(chatId, cursor, initMessageId)
-                .then((msg) => msg.message_id)
+    try {
+        for await (const token of tokenIterator) {
+            buf += token
+            if (!prevId) {
+                prevId = await telegram
+                    .sendMessage(chatId, cursor, initMessageId)
+                    .then((msg) => msg.message_id)
 
-            // Start the edit loop after we have our first message so that at least 1000ms of tokens have
-            // accumulated.
-            setTimeout(editLoop, 1000)
+                // Start the edit loop after we have our first message so that at least 1000ms of tokens have
+                // accumulated.
+                setTimeout(editLoop, 1000)
+            }
         }
+    } catch (err) {
+        // Ensure editLoop stops in case of error
+        isFinished = true
+        throw err
     }
 
     isFinished = true // Stop the send loop from continuing.
