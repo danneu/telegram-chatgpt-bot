@@ -25,7 +25,10 @@ Demo: <https://t.me/god_in_a_bot> (Only supports 1:1 private convos)
 -   [x] **Language autodetection**. If the bot is responding in a language different from the one configured with `/voice`, it uses a default voice in that language instead of forcing, for example, a Spanish voice to butcher German.
 -   [x] **Streaming updates**. Similar to ChatGPT's online UI, tokens show up in the Telegram message as the bot receives them.
 -   [x] **Custom system prompt**. Configure a custom system prompt for the current chat.
--   [x] **Toggle between GPT-3.5 and GPT-4**.
+-   [x] **Supports multiple models**.
+    -   `gpt-3.5-turbo` (default)
+    -   `gpt-4`
+    -   `text-davinci-003`
 -   [x] Automatically change voice/language according to user prompt language.
     -   This is implemented by repeatedly updating the message as tokens are received.
 -   [ ] Group chat support. (Still need to figure out how it should work)

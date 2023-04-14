@@ -238,6 +238,7 @@ export class TelegramClient {
         return await this.request('editMessageText', {
             chat_id: chatId,
             message_id: messageId,
+            parse_mode: 'HTML',
             text,
         }).then((x) => x.json())
     }

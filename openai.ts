@@ -131,6 +131,7 @@ type LanguageResult =
 // it's only used on ChatGPT answers.
 const prompt = `Determine the two-letter ISO 639-1 language code for the following text. If you recognize the language, respond with the two-letter code (e.g., "en" for English, "es" for Spanish) and NOTHING else. If you don't recognize the language, respond with a "?". The text: `
 
+// TODO: Consider using Ada or Babbage which are cheap and fast.
 export async function detectLanguage(text: string): Promise<LanguageResult> {
     const substring = util.splitTake(300, text)
     const fullPrompt = prompt + '```' + substring + '```'
@@ -160,5 +161,72 @@ export async function detectLanguage(text: string): Promise<LanguageResult> {
         return { kind: 'success', code: answer.toLowerCase() }
     } else {
         return { kind: 'error', error: `unexpected answer: ${answer}` }
+    }
+}
+
+export async function textCompletion(
+    prompt: string,
+    temperature: number,
+): Promise<string> {
+    const response = await openai.createCompletion({
+        model: 'text-davinci-003',
+        prompt,
+        temperature,
+        max_tokens: 1024,
+    })
+    console.log(response.data)
+    const answer = response.data.choices[0].text
+    if (typeof answer === 'string') {
+        return answer
+    } else {
+        throw new Error(`textCompletion failed to get answer`)
+    }
+}
+
+export async function* streamTextCompletions(
+    prompt: string,
+    temperature: number,
+): AsyncGenerator<string> {
+    const response = await openai.createCompletion(
+        {
+            model: 'text-davinci-003',
+            temperature,
+            prompt,
+            max_tokens: 1024,
+            stream: true,
+        },
+        {
+            responseType: 'stream',
+            validateStatus(status) {
+                if (status >= 200 && status < 300) {
+                    return true
+                } else if (status === 429) {
+                    return true
+                } else {
+                    return false
+                }
+            },
+        },
+    )
+
+    // @ts-expect-error: Not sure how to annotate the fact that data is async iterator.
+    for await (const chunk of response.data) {
+        const lines = chunk
+            .toString('utf8')
+            .split('\n')
+            .filter((line: string) => line.trim().startsWith('data: '))
+
+        for (const line of lines) {
+            const message = line.replace(/^data: /, '')
+            if (message === '[DONE]') {
+                return
+            }
+
+            const json = JSON.parse(message)
+            const token = json.choices[0].text
+            if (typeof token === 'string' && token.length > 0) {
+                yield token
+            }
+        }
     }
 }

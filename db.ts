@@ -153,6 +153,7 @@ export async function insertAnswer({
     answerTokens,
     gptElapsed,
     ttsElapsed,
+    model,
 }: {
     userId: number
     chatId: number
@@ -163,12 +164,13 @@ export async function insertAnswer({
     answerTokens: number
     gptElapsed: number | undefined
     ttsElapsed: number | undefined
+    model: Model
 }): Promise<Prompt> {
     return await one(
         pool,
         `
-    insert into prompts (chat_id, user_id, prompt, message_id, answer, prompt_tokens, answer_tokens, gpt_elapsed, tts_elapsed)
-    values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    insert into prompts (chat_id, user_id, prompt, message_id, answer, prompt_tokens, answer_tokens, gpt_elapsed, tts_elapsed, model)
+    values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     returning *
 `,
         [
@@ -181,15 +183,13 @@ export async function insertAnswer({
             answerTokens,
             gptElapsed,
             ttsElapsed,
+            model,
         ],
     )
 }
 
 // `model` should be listed: https://platform.openai.com/docs/models/model-endpoint-compatibility
-export async function setModel(
-    chatId: number,
-    model: 'gpt-3.5-turbo' | 'gpt-4',
-): Promise<void> {
+export async function setModel(chatId: number, model: Model): Promise<void> {
     await pool.query(
         `
     update chats
@@ -300,9 +300,17 @@ export interface User {
 export interface Chat {
     id: number
     type: 'private' | 'group' | 'supergroup' | 'channel'
-    model: 'gpt-3.5-turbo' | 'gpt-4'
+    model: Model
     voice: string | undefined
     master_prompt: string | undefined
     send_voice: boolean
     temperature: number
+}
+
+const Models = ['gpt-3.5-turbo', 'gpt-4', 'text-davinci-003'] as const
+export type Model = typeof Models[number]
+
+// Narrow string into model type.
+export function isModel(m: string): m is Model {
+    return Models.includes(m as Model)
 }
