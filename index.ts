@@ -267,7 +267,7 @@ async function handleCallbackQuery(
             `🌡️ Temperature changed to ${temperature.toFixed(1)}`,
         )
     } else if (callbackData.startsWith('model:')) {
-        if (hasGpt4Permission(userId)) {
+        if (canManageModel(userId)) {
             const model = callbackData.split(':')[1]
             if (!db.isModel(model)) {
                 await telegram.sendMessage(
@@ -293,10 +293,7 @@ async function handleCallbackQuery(
                 telegram.editMessageReplyMarkup(
                     chatId,
                     messageId,
-                    inlineKeyboardForModelSelect(
-                        model,
-                        hasGpt4Permission(userId),
-                    ),
+                    inlineKeyboardForModelSelect(model, canManageModel(userId)),
                 ),
             ])
         }
@@ -780,21 +777,21 @@ Bot info:
             await completeAndSendAnswer(chat, messageId, prevPrompt.prompt)
         }
     } else if (command.cmd === '/model') {
-        if (hasGpt4Permission(userId)) {
+        if (canManageModel(userId)) {
             await telegram.request('sendMessage', {
                 chat_id: chatId,
                 text: 'Select an OpenAI model.',
                 reply_markup: JSON.stringify({
                     inline_keyboard: inlineKeyboardForModelSelect(
                         chat.model,
-                        hasGpt4Permission(userId),
+                        canManageModel(userId),
                     ),
                 }),
             })
         } else {
             await telegram.sendMessage(
                 chatId,
-                `Sorry, you don't have permission to use GPT-4.`,
+                `⚠️ Sorry, you don't have permission to do that.`,
                 messageId,
             )
         }
@@ -1152,12 +1149,12 @@ async function streamTokensToTelegram(
     }
 }
 
-function hasGpt4Permission(userId: number): boolean {
-    if (config.GPT4_ENABLED === '*') {
+function canManageModel(userId: number): boolean {
+    if (config.CAN_MANAGE_MODEL === '*') {
         return true
     } else if (
-        Array.isArray(config.GPT4_ENABLED) &&
-        config.GPT4_ENABLED.includes(userId)
+        Array.isArray(config.CAN_MANAGE_MODEL) &&
+        config.CAN_MANAGE_MODEL.includes(userId)
     ) {
         return true
     } else {

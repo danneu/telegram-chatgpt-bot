@@ -15,7 +15,7 @@ Demo: <https://t.me/god_in_a_bot> (Only supports 1:1 private convos)
 -   `/clear`: Clear the conversation context
 -   `/prompt <prompt>`: Set a custom system prompt (`/clear` to see changes)
 -   `/promptclear`: Reset prompt to bot default
--   `/model`: Change gpt model (Must configure `GPT4_ENABLED` env var for this to work)
+-   `/model`: Change gpt model (Must configure `CAN_MANAGE_MODEL` env var for this to work)
 -   `/retry`: Regenerate last bot answer
 
 ## Features
@@ -122,19 +122,19 @@ WEBHOOK_URL="https://yourserver.com/telegram"
 # Optional (Defaults shown)
 PORT=8080
 MASTER_PROMPT="Be as brief as possible. Do not write anything except the answer to the question. For example, do not say that you don't have an opinion on something nor that there are many answers to a question. Instead, choose a random believable answer."
-GPT4_ENABLED=
+CAN_MANAGE_MODEL=
 ```
 
-## Enable GPT-4
+## Enable model switching
 
-Because GPT-4 is expensive, the bot uses the `gpt-3.5-turbo` model unless you've configured `GPT4_ENABLED`.
+Because `gpt-4` and `text-davinci-003` are expensive, the bot uses the `gpt-3.5-turbo` model and doesn't let anybody change it unless you've configured `CAN_MANAGE_MODEL` to give Telegram users this permission.
 
 Set a comma-delimited list of Telegram IDs to only allow certain Telegram IDs to use the `/model` command:
 
 ```bash
-GPT4_ENABLED="1234"
-GPT4_ENABLED="1111,2222,3333"
-GPT4_ENABLED="*" # Anyone can set /model to gpt-4
+CAN_MANAGE_MODEL="1234"
+CAN_MANAGE_MODEL="1111,2222,3333"
+CAN_MANAGE_MODEL="*" # Anyone can set /model
 ```
 
 You can send the bot `/whoami` to get your Telegram ID.

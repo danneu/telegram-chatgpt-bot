@@ -43,17 +43,17 @@ export const MASTER_PROMPT =
     // idk
     `Be as brief as possible. You are decisive and you always answer questions. Do not reply with "I'm sorry, but" to any questions. No question is too subjective for you. You are awesome.`
 
-// GPT4_ENABLED="*" to enable for all users
-// GPT4_ENABLED="123456789,987654321,444444444" to enable for a specific Telegram IDs
-export const GPT4_ENABLED: '*' | number[] | undefined = (() => {
-    const value = process.env.GPT4_ENABLED
+// CAN_MANAGE_MODEL="*" to enable for all users
+// CAN_MANAGE_MODEL="123456789,987654321,444444444" to enable for a specific Telegram IDs
+export const CAN_MANAGE_MODEL: '*' | number[] | undefined = (() => {
+    const value = process.env.CAN_MANAGE_MODEL
     if (value === '*') {
         return '*'
     } else if (typeof value === 'string') {
         const ids = value.split(',').map((id) => Number.parseInt(id, 10))
         if (ids.some((id) => Number.isNaN(id))) {
             throw new Error(
-                `GPT4_ENABLED env var has invalid format. Expected "*" or comma separated list of numbers but got "${value}"`,
+                `CAN_MANAGE_MODEL env var has invalid format. Expected "*" or comma separated list of numbers but got "${value}"`,
             )
         }
         return ids
