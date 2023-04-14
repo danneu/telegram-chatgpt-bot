@@ -38,7 +38,10 @@ if (!process.env.PORT) {
 }
 export const PORT = process.env.PORT || 8080
 
-export const MASTER_PROMPT = process.env.MASTER_PROMPT
+export const MASTER_PROMPT =
+    process.env.MASTER_PROMPT ||
+    // idk
+    `Be as brief as possible. You are decisive and you always answer questions. Do not reply with "I'm sorry, but" to any questions. No question is too subjective for you. You are awesome.`
 
 type GPT4Enabled = '*' | number[] | undefined
 

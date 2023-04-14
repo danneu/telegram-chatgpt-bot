@@ -18,6 +18,7 @@ create table chats (
     send_voice boolean not null default true,
     uname text null, -- just useful for debug
     model text not null default 'gpt-3.5-turbo',
+    master_prompt text null,
     created_at timestamptz not null default now()
 );
 

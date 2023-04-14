@@ -73,6 +73,7 @@ export async function* streamChatCompletions(
 module.exports.fetchChatResponse = async function (
     messages: db.Message[],
     temperature: number,
+    model: 'gpt-3.5-turbo' | 'gpt-4',
 ) {
     console.log(
         `[fetchChatResponse] making chatgpt request with ${
@@ -82,7 +83,7 @@ module.exports.fetchChatResponse = async function (
     const start = Date.now()
     const response = await openai.createChatCompletion(
         {
-            model: 'gpt-3.5-turbo',
+            model,
             messages,
             temperature, // 0 to 2.0, anything about 1.0 is nonsense
         },

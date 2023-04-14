@@ -21,9 +21,6 @@ const telegram = new t.TelegramClient(config.TELEGRAM_BOT_TOKEN)
 // HACK: I don't like storing this on the top level
 let botUsername = ''
 
-// idk
-const DEFAULT_MASTER_PROMPT = `Be as brief as possible. You are decisive and you always answer questions. Do not reply with "I'm sorry, but" to any questions. No question is too subjective for you. You are awesome.`
-
 const PER_USER_CONCURRENCY = 3
 // Mapping of user_id to the number of requests they have in flight.
 const inflights: { [key: number]: number } = {}
@@ -64,6 +61,15 @@ async function initializeBot() {
             command: 'clear',
             description: 'reset chat context',
         },
+        // Not adding /prompt to the list because it takes an argument.
+        // Only makes sense to register commands that have no arguments
+        // thus can be clicked when they are autolinked in text.
+        //
+        // {
+        //     command: 'prompt',
+        //     description: 'set a master prompt',
+        // },
+        { command: 'promptclear', description: 'clear master prompt' },
         // {
         //     command: 'ai',
         //     description: 'send message to bot (only needed in group chat)',
@@ -410,7 +416,7 @@ async function processUserMessage(
     // Fetch chatgpt completion
     const messages = await db.listHistory(
         chatId,
-        config.MASTER_PROMPT || DEFAULT_MASTER_PROMPT,
+        chat.master_prompt || config.MASTER_PROMPT,
         userText,
     )
 
@@ -561,8 +567,33 @@ async function handleCommand(
     } else if (command.cmd === '/clear') {
         await telegram.indicateTyping(chatId)
         await db.clearPrompts(chatId)
-        await telegram.sendMessage(chatId, 'Context cleared.', messageId)
+        await telegram.sendMessage(chatId, '✅ Context cleared.', messageId)
         return
+    } else if (command.cmd === '/promptclear') {
+        await db.setMasterPrompt(chatId, null)
+        await telegram.sendMessage(
+            chatId,
+            '✅ Custom system prompt cleared.',
+            messageId,
+        )
+        return
+    } else if (command.cmd === '/prompt') {
+        if (command.text.length === 0) {
+            await telegram.sendMessage(
+                chatId,
+                'Usage: <code>/prompt This is the new master prompt</code>',
+                messageId,
+            )
+            return
+        } else {
+            await db.setMasterPrompt(chatId, command.text)
+            await telegram.sendMessage(
+                chatId,
+                '✅ Master prompt updated.\n\nTo see changes: /clear context',
+                messageId,
+            )
+            return
+        }
     } else if (command.cmd === '/info') {
         await telegram.sendMessage(
             chatId,
@@ -573,6 +604,7 @@ Bot info:
 - Voice: ${prettyVoice(chat.voice) || '--'} 
 - Voice responses: ${chat.send_voice ? '🔊 On' : '🔇 Off'}
 - Temperature: ${chat.temperature.toFixed(1)}
+- Master prompt: ${chat.master_prompt || '(Bot default)'}
         `.trim(),
             messageId,
         )

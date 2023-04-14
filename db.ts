@@ -62,10 +62,24 @@ export async function setVoiceResponse(chatId: number, isEnabled: boolean) {
     )
 }
 
+export async function setMasterPrompt(
+    chatId: number,
+    masterPrompt: string | null,
+) {
+    return pool.query(
+        `
+        update chats
+        set master_prompt = $2
+        where id = $1
+        `,
+        [chatId, masterPrompt],
+    )
+}
+
 export async function upsertChat(
     id: number,
     type: string,
-    uname: string,
+    uname: string | undefined,
 ): Promise<Chat> {
     return one(
         pool,
@@ -258,6 +272,7 @@ export type Chat = {
     type: 'private' | 'group' | 'supergroup' | 'channel'
     model: 'gpt-3.5-turbo' | 'gpt-4'
     voice: string | undefined
+    master_prompt: string | undefined
     send_voice: boolean
     temperature: number
 }
