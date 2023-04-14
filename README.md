@@ -13,9 +13,9 @@ Demo: <https://t.me/god_in_a_bot> (Only supports 1:1 private convos)
 -   `/voiceon`, `/voiceoff`: Toggle voice memos from the bot
 -   `/info`: Show bot settings (current language, current temperature, voices on/off)
 -   `/clear`: Clear the conversation context
--   `/gpt3`, `/gpt4`: Change OpenAI model (Must configure `GPT4_ENABLED` env var for this to work)
 -   `/prompt <prompt>`: Set a custom system prompt (`/clear` to see changes)
 -   `/promptclear`: Reset prompt to bot default
+-   `/model`: Change gpt model (Must configure `GPT4_ENABLED` env var for this to work)
 
 ## Features
 
@@ -124,11 +124,12 @@ GPT4_ENABLED=
 
 Because GPT-4 is expensive, the bot uses the `gpt-3.5-turbo` model unless you've configured `GPT4_ENABLED`.
 
-Set a comma-delimited list of Telegram IDs to only allow certain Telegram IDs to use the `/gpt4` command:
+Set a comma-delimited list of Telegram IDs to only allow certain Telegram IDs to use the `/model` command:
 
 ```bash
 GPT4_ENABLED="1234"
 GPT4_ENABLED="1111,2222,3333"
+GPT4_ENABLED="*" # Anyone can set /model to gpt-4
 ```
 
 You can send the bot `/whoami` to get your Telegram ID.
