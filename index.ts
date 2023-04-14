@@ -214,14 +214,36 @@ const VOICE_MENU: Record<string, any> = {
     },
 }
 
+function inlineKeyboardForModelSelect(
+    model: 'gpt-3.5-turbo' | 'gpt-4',
+): Array<Array<{ text: string; callback_data: string }>> {
+    return [
+        [
+            {
+                text: `${
+                    model === 'gpt-3.5-turbo' ? '✅' : ''
+                } GPT-3.5 (Fastest)`,
+                callback_data: 'model:gpt-3.5-turbo',
+            },
+            {
+                text: `${
+                    model === 'gpt-4' ? '✅' : ''
+                } GPT-4 (Smarter, slower)`,
+                callback_data: 'model:gpt-4',
+            },
+        ],
+    ]
+}
+
 // async function handleCallbackQuery(body: t.CallbackQuery) {
 async function handleCallbackQuery(
-    chatId: number,
+    chat: db.Chat,
     userId: number,
     messageId: number,
     callbackQueryId: string,
     callbackData: string,
 ): Promise<void> {
+    const chatId = chat.id
     // https://core.telegram.org/bots/api#inlinekeyboardmarkup
     // const chatId = body.message.chat.id
     // const messageId = body.message.message_id
@@ -243,14 +265,24 @@ async function handleCallbackQuery(
             if (model !== 'gpt-3.5-turbo' && model !== 'gpt-4') {
                 return
             }
+
+            if (chat.model === model) {
+                // Ignore button dupe presses
+                await telegram.answerCallbackQuery(callbackQueryId, '')
+                return
+            }
+
             await db.setModel(chatId, model)
             // https://core.telegram.org/bots/api#answercallbackquery
             await Promise.all([
-                telegram.answerCallbackQuery(
-                    callbackQueryId,
-                    `✅ Model changed to ${model}`,
-                ),
+                // Dismiss "Loading..." callback message
+                telegram.answerCallbackQuery(callbackQueryId, ''),
                 telegram.sendMessage(chatId, `Model changed to ${model}`),
+                telegram.editMessageReplyMarkup(
+                    chatId,
+                    messageId,
+                    inlineKeyboardForModelSelect(model),
+                ),
             ])
         }
     } else if (callbackData.startsWith('voice:')) {
@@ -687,18 +719,7 @@ Bot info:
                 chat_id: chatId,
                 text: 'Select a ChatGPT model.',
                 reply_markup: JSON.stringify({
-                    inline_keyboard: [
-                        [
-                            {
-                                text: 'GPT-3.5 (Fastest)',
-                                callback_data: 'model:gpt-3.5-turbo',
-                            },
-                            {
-                                text: 'GPT-4 (Smarter, slower)',
-                                callback_data: 'model:gpt-4',
-                            },
-                        ],
-                    ],
+                    inline_keyboard: inlineKeyboardForModelSelect(chat.model),
                 }),
             })
         } else {
@@ -898,13 +919,25 @@ async function handleWebhookUpdate(update: t.Update): Promise<void> {
             return
         }
 
+        const message = update.callback_query.message
+
+        if (message.chat === undefined) {
+            return
+        }
+
+        const chat = await db.upsertChat(
+            message.chat.id,
+            message.chat.type,
+            message.chat.username,
+        )
+
         const chatId = update.callback_query.message.chat.id
         const userId = update.callback_query.from.id
         const messageId = update.callback_query.message.message_id
         const callbackQueryId = update.callback_query.id
         const callbackData = update.callback_query.data
         await handleCallbackQuery(
-            chatId,
+            chat,
             userId,
             messageId,
             callbackQueryId,
