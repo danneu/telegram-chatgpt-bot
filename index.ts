@@ -71,19 +71,11 @@ async function initializeBot(): Promise<void> {
         //     description: 'set a master prompt',
         // },
         { command: 'promptclear', description: 'clear master prompt' },
-        // {
-        //     command: 'ai',
-        //     description: 'send message to bot (only needed in group chat)',
-        // },
-    ]
-
-    // Don't broadcast /gpt commands unless user has a choice.
-    if (config.GPT4_ENABLED !== undefined) {
-        commands.push({
+        {
             command: 'model',
-            description: 'choose gpt-3.5 vs gpt-4',
-        })
-    }
+            description: 'switch to another model',
+        },
+    ]
 
     await telegram.setMyCommands(commands)
 }
@@ -216,9 +208,10 @@ const VOICE_MENU: Record<string, any> = {
 }
 
 function inlineKeyboardForModelSelect(
-    model: 'gpt-3.5-turbo' | 'gpt-4',
+    model: db.Model,
+    showGpt4: boolean,
 ): Array<Array<{ text: string; callback_data: string }>> {
-    return [
+    const rows = [
         [
             {
                 text: `${
@@ -228,12 +221,25 @@ function inlineKeyboardForModelSelect(
             },
             {
                 text: `${
+                    model === 'text-davinci-003' ? '✅' : ''
+                } Davinci (Weird)`,
+                callback_data: 'model:text-davinci-003',
+            },
+        ],
+    ]
+
+    if (showGpt4) {
+        rows.push([
+            {
+                text: `${
                     model === 'gpt-4' ? '✅' : ''
                 } GPT-4 (Smarter, slower)`,
                 callback_data: 'model:gpt-4',
             },
-        ],
-    ]
+        ])
+    }
+
+    return rows
 }
 
 // async function handleCallbackQuery(body: t.CallbackQuery) {
@@ -261,9 +267,14 @@ async function handleCallbackQuery(
             `🌡️ Temperature changed to ${temperature.toFixed(1)}`,
         )
     } else if (callbackData.startsWith('model:')) {
-        if (hasGpt4Permission(userId)) {
+        if (canManageModel(userId)) {
             const model = callbackData.split(':')[1]
-            if (model !== 'gpt-3.5-turbo' && model !== 'gpt-4') {
+            if (!db.isModel(model)) {
+                await telegram.sendMessage(
+                    chatId,
+                    `❌ Unhandled model. Sorry!`,
+                    messageId,
+                )
                 return
             }
 
@@ -282,7 +293,7 @@ async function handleCallbackQuery(
                 telegram.editMessageReplyMarkup(
                     chatId,
                     messageId,
-                    inlineKeyboardForModelSelect(model),
+                    inlineKeyboardForModelSelect(model, canManageModel(userId)),
                 ),
             ])
         }
@@ -491,6 +502,7 @@ async function processUserMessage(
         answerTokens: result.answerTokens,
         gptElapsed: result.gptElapsed,
         ttsElapsed: result.ttsElapsed,
+        model: chat.model,
     })
 }
 
@@ -522,11 +534,29 @@ async function completeAndSendAnswer(
     const gptStart = Date.now()
     let tokens
     try {
-        tokens = openai.streamChatCompletions(
-            messages,
-            chat.model,
-            chat.temperature,
-        )
+        if (chat.model === 'text-davinci-003') {
+            let prompt = ''
+            for (const { role, content } of messages) {
+                switch (role) {
+                    case 'system':
+                    case 'user':
+                        prompt += `A: ${content}\n`
+                        break
+                    case 'assistant':
+                        prompt += `B: ${content}\n`
+                        break
+                }
+            }
+            prompt += 'B: '
+            // console.log(prompt)
+            tokens = openai.streamTextCompletions(prompt, chat.temperature)
+        } else {
+            tokens = openai.streamChatCompletions(
+                messages,
+                chat.model,
+                chat.temperature,
+            )
+        }
     } catch (err: any) {
         if (err.response?.status === 429) {
             await telegram.sendMessage(
@@ -737,22 +767,31 @@ Bot info:
         })
     } else if (command.cmd === '/retry') {
         const prevPrompt = await db.getPrevPrompt(chatId)
-        if (prevPrompt != null) {
+        if (prevPrompt == null) {
+            await telegram.sendMessage(
+                chatId,
+                `🤷‍♂️ There is no prompt to retry.`,
+                messageId,
+            )
+        } else {
             await completeAndSendAnswer(chat, messageId, prevPrompt.prompt)
         }
     } else if (command.cmd === '/model') {
-        if (hasGpt4Permission(userId)) {
+        if (canManageModel(userId)) {
             await telegram.request('sendMessage', {
                 chat_id: chatId,
-                text: 'Select a ChatGPT model.',
+                text: 'Select an OpenAI model.',
                 reply_markup: JSON.stringify({
-                    inline_keyboard: inlineKeyboardForModelSelect(chat.model),
+                    inline_keyboard: inlineKeyboardForModelSelect(
+                        chat.model,
+                        canManageModel(userId),
+                    ),
                 }),
             })
         } else {
             await telegram.sendMessage(
                 chatId,
-                `Sorry, you don't have permission to use GPT-4.`,
+                `⚠️ Sorry, you don't have permission to do that.`,
                 messageId,
             )
         }
@@ -1021,7 +1060,7 @@ async function streamTokensToTelegram(
     chatId: number,
     initMessageId: number,
     tokenIterator: AsyncGenerator<string>,
-    model: 'gpt-3.5-turbo' | 'gpt-4',
+    model: db.Model,
 ): Promise<{ answer: string; tokenCount: number; messageId: number }> {
     const interval = 2000
     let tokenCount = 0
@@ -1031,8 +1070,18 @@ async function streamTokensToTelegram(
     let isFinished = false
     // https://en.wikipedia.org/wiki/Block_Elements
     const cursor = '▍'
-    // Only prefix GPT-4 since it's expensive.
-    const prefix = model === 'gpt-4' ? '(GPT-4) ' : ''
+    let prefix = ''
+    switch (model) {
+        case 'gpt-3.5-turbo':
+            prefix = '<b>GPT-3.5:</b> '
+            break
+        case 'gpt-4':
+            prefix = '<b>🧠 GPT-4:</b> '
+            break
+        case 'text-davinci-003':
+            prefix = '<b>👽 Davinci:</b> '
+            break
+    }
 
     // Call after prevId is set.
     function editLoop(): void {
@@ -1100,12 +1149,12 @@ async function streamTokensToTelegram(
     }
 }
 
-function hasGpt4Permission(userId: number): boolean {
-    if (config.GPT4_ENABLED === '*') {
+function canManageModel(userId: number): boolean {
+    if (config.CAN_MANAGE_MODEL === '*') {
         return true
     } else if (
-        Array.isArray(config.GPT4_ENABLED) &&
-        config.GPT4_ENABLED.includes(userId)
+        Array.isArray(config.CAN_MANAGE_MODEL) &&
+        config.CAN_MANAGE_MODEL.includes(userId)
     ) {
         return true
     } else {

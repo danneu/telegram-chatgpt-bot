@@ -33,6 +33,7 @@ create table prompts (
     answer_tokens int not null,
     gpt_elapsed int null, -- milliseconds it took OpenAI ChatGPT API to respond
     tts_elapsed int null, -- milliseconds it took for TTS API to respond
+    model text not null default 'gpt-3.5-turbo',
     lang text null,
     created_at timestamptz not null default now()
 );
