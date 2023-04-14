@@ -4,9 +4,20 @@ A self-hostable Telegram bot that lets you speak with ChatGPT through text and v
 
 **️⚠ Hotfix** Due to popularity, the demo bot rate-limits unauthorized users after 10 messages per reboot.
 
-Demo bot: <https://t.me/god_in_a_bot> (Only supports 1:1 private convos)
+<div style="text-align: center">
+Demo: <a href="https://t.me/god_in_a_bot">@god_in_a_bot</a>
+</div>
 
-![screenshot](demo.png)
+## Screenshots
+
+(Click to enlarge)
+
+<a href="img/temp.png"><img src="img/temp.png" width="28%"></a>
+<a href="img/retry.png"><img src="img/retry.png" width="28%"></a>
+<a href="img/prompt.png"><img src="img/prompt.png" width="28%"></a>
+<a href="img/model.png"><img src="img/model.png" width="28%"></a>
+<a href="img/info.png"><img src="img/info.png" width="28%"></a>
+<a href="img/img.png"><img src="img/img.png" width="28%"></a>
 
 ## Commands
 
