@@ -1007,9 +1007,9 @@ initializeBot()
 
 // As chat completion tokens come streaming in from OpenAI, this function accumulates
 // the tokens into a buffer. First it creates a new Telegram message, and every
-// 1000ms it edits that message with the latest state of the token buffer.
+// XXXXms it edits that message with the latest state of the token buffer.
 //
-// I chose 1000ms because I don't want to spam the Telegram API, but it means that
+// I chose 1000ms+ because I don't want to spam the Telegram API, but it means that
 // larger chunks of text appear at a time.
 //
 // The goal here is for the user to not have to wait until the entire token stream
@@ -1023,6 +1023,7 @@ async function streamTokensToTelegram(
     tokenIterator: AsyncGenerator<string>,
     model: 'gpt-3.5-turbo' | 'gpt-4',
 ): Promise<{ answer: string; tokenCount: number; messageId: number }> {
+    const interval = 2000
     let tokenCount = 0
     let buf = '' // Latest buffer
     let sentBuf = '' // A snapshot of the buffer that was sent so we know when it has changed.
@@ -1058,7 +1059,7 @@ async function streamTokensToTelegram(
                     isFinished = true
                 })
         }
-        setTimeout(editLoop, 1000)
+        setTimeout(editLoop, interval)
     }
 
     try {
@@ -1070,8 +1071,10 @@ async function streamTokensToTelegram(
                     .sendMessage(chatId, prefix + cursor, initMessageId)
                     .then((msg) => msg.message_id)
 
-                // Start the edit loop after we have our first message so that at least 1000ms of tokens have
-                // accumulated.
+                // Start the edit loop after we have our first message so that
+                // at least 1000ms of tokens have accumulated.
+                //
+                // Note: first update should be in 1000ms, the rest of the edits use `interval`.
                 setTimeout(editLoop, 1000)
             }
         }
