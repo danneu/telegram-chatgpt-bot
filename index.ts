@@ -61,6 +61,7 @@ async function initializeBot(): Promise<void> {
             command: 'clear',
             description: 'reset chat context',
         },
+        { command: 'retry', description: 'regenerate last bot answer' },
         // Not adding /prompt to the list because it takes an argument.
         // Only makes sense to register commands that have no arguments
         // thus can be clicked when they are autolinked in text.
@@ -470,30 +471,53 @@ async function processUserMessage(
 
     await telegram.indicateTyping(chatId)
 
-    // Fetch chatgpt completion
-    const messages = await db.listHistory(
+    // TODO: Consider inserting prompt and then editing ttsElapsed like
+    // how it worked before completeAndSendAnswer was extracted.
+    // That way we insert sooner in case of tts failure.
+    const result = await completeAndSendAnswer(chat, messageId, userText)
+
+    if (result == null) {
+        // Short-circuited because of error and error was sent to user.
+        return
+    }
+
+    await db.insertAnswer({
+        userId,
         chatId,
-        typeof chat.master_prompt === 'string' && chat.master_prompt.length > 0
-            ? chat.master_prompt
-            : config.MASTER_PROMPT,
+        prompt: userText,
+        promptTokens: result.promptTokens,
+        messageId: result.messageId,
+        answer: result.answer,
+        answerTokens: result.answerTokens,
+        gptElapsed: result.gptElapsed,
+        ttsElapsed: result.ttsElapsed,
+    })
+}
+
+// Extracted from processUserMessage so that I can easily do this work from the
+// /retry command. However, note that /retry doesn't create/edit database entries
+// but processUserMessage callsite does.
+//
+async function completeAndSendAnswer(
+    chat: db.Chat,
+    messageId: number,
+    userText: string,
+): Promise<
+    | {
+          gptElapsed: number
+          ttsElapsed: number | undefined
+          promptTokens: number
+          answerTokens: number
+          answer: string
+          messageId: number
+      }
+    | undefined
+> {
+    const messages = await db.listHistory(
+        chat.id,
+        chat.master_prompt ?? config.MASTER_PROMPT,
         userText,
     )
-
-    // const { response, elapsed: gptElapsed } = await openai.fetchChatResponse(
-    //     history,
-    //     userText,
-    //     chat.temperature,
-    // )
-
-    // // Handle 429 Too Many Requests
-    // if (response.status === 429) {
-    //     await telegram.sendMessage(
-    //         chatId,
-    //         `❌ Bot is rate-limited by OpenAI API. Try again soon.`,
-    //         messageId,
-    //     )
-    //     return
-    // }
 
     const gptStart = Date.now()
     let tokens
@@ -506,7 +530,7 @@ async function processUserMessage(
     } catch (err: any) {
         if (err.response?.status === 429) {
             await telegram.sendMessage(
-                chatId,
+                chat.id,
                 `❌ Bot is rate-limited by OpenAI API. Try again soon.`,
                 messageId,
             )
@@ -520,7 +544,7 @@ async function processUserMessage(
         answer,
         messageId: answerMessageId,
         tokenCount,
-    } = await streamTokensToTelegram(chatId, messageId, tokens, chat.model)
+    } = await streamTokensToTelegram(chat.id, messageId, tokens, chat.model)
     const gptElapsed = Date.now() - gptStart
     const promptTokens = countTokens(userText)
     const answerTokens = tokenCount // countTokens(answer)
@@ -532,21 +556,12 @@ async function processUserMessage(
             )})`,
         )
     }
-    const prompt = await db.insertAnswer({
-        userId,
-        chatId,
-        prompt: userText,
-        promptTokens,
-        messageId: answerMessageId,
-        answer,
-        answerTokens,
-        gptElapsed,
-    })
 
     // Send trailing voice memo.
+    let ttsElapsed: number | undefined
     if (chat.send_voice) {
         telegram
-            .indicateTyping(chatId) // Don't await
+            .indicateTyping(chat.id) // Don't await
             .catch((err) => {
                 console.error(`Failed to indicate typing: ${String(err)}`)
             })
@@ -567,21 +582,28 @@ async function processUserMessage(
 
         // Generate answer voice transcription
         const { byteLength, elapsed, readable } = await tts.synthesize(
-            message.message_id,
-            prompt.answer,
+            answer,
             finalVoice,
         )
 
-        await Promise.all([
-            db.setTtsElapsed(prompt.id, elapsed),
-            telegram.sendVoice(
-                chatId,
-                answerMessageId,
-                '',
-                readable,
-                byteLength,
-            ),
-        ])
+        ttsElapsed = elapsed
+
+        await telegram.sendVoice(
+            chat.id,
+            answerMessageId,
+            '',
+            readable,
+            byteLength,
+        )
+    }
+
+    return {
+        gptElapsed,
+        ttsElapsed,
+        promptTokens,
+        answerTokens,
+        answer,
+        messageId: answerMessageId,
     }
 }
 
@@ -713,6 +735,11 @@ Bot info:
                 ],
             }),
         })
+    } else if (command.cmd === '/retry') {
+        const prevPrompt = await db.getPrevPrompt(chatId)
+        if (prevPrompt != null) {
+            await completeAndSendAnswer(chat, messageId, prevPrompt.prompt)
+        }
     } else if (command.cmd === '/model') {
         if (hasGpt4Permission(userId)) {
             await telegram.request('sendMessage', {

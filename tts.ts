@@ -3,7 +3,7 @@ import { AZURE_SPEECH_KEY, AZURE_SPEECH_REGION } from './config'
 import { Readable } from 'stream'
 
 export async function synthesize(
-    messageId: number,
+    // messageId: number,
     text: string,
     voice: string,
 ): Promise<{
@@ -11,10 +11,9 @@ export async function synthesize(
     byteLength: number
     readable: Readable
 }> {
-    console.log(
-        `[synthesize] sending voice synthesize request. messageId=${messageId} text length="${text.length}" voice=${voice}`,
-    )
-    console.log({ AZURE_SPEECH_KEY, AZURE_SPEECH_REGION })
+    // console.log(
+    //     `[synthesize] sending voice synthesize request. messageId=${messageId} text length="${text.length}" voice=${voice}`,
+    // )
     const speechConfig = sdk.SpeechConfig.fromSubscription(
         AZURE_SPEECH_KEY,
         AZURE_SPEECH_REGION,

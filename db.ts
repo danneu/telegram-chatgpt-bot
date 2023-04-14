@@ -30,6 +30,21 @@ export async function clearPrompts(userId: number): Promise<void> {
     )
 }
 
+export async function getPrevPrompt(chatId: Chat['id']): Promise<Prompt> {
+    const prompt: Prompt = await one(
+        pool,
+        `
+    select * from prompts
+    where chat_id = $1
+    order by id desc
+    limit 1
+    `,
+        [chatId],
+    )
+
+    return prompt
+}
+
 export async function upsertUser(
     id: number,
     uname: string,
@@ -137,6 +152,7 @@ export async function insertAnswer({
     promptTokens,
     answerTokens,
     gptElapsed,
+    ttsElapsed,
 }: {
     userId: number
     chatId: number
@@ -146,12 +162,13 @@ export async function insertAnswer({
     promptTokens: number
     answerTokens: number
     gptElapsed: number | undefined
+    ttsElapsed: number | undefined
 }): Promise<Prompt> {
     return await one(
         pool,
         `
-    insert into prompts (chat_id, user_id, prompt, message_id, answer, prompt_tokens, answer_tokens, gpt_elapsed)
-    values ($1, $2, $3, $4, $5, $6, $7, $8)
+    insert into prompts (chat_id, user_id, prompt, message_id, answer, prompt_tokens, answer_tokens, gpt_elapsed, tts_elapsed)
+    values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     returning *
 `,
         [
@@ -163,6 +180,7 @@ export async function insertAnswer({
             promptTokens,
             answerTokens,
             gptElapsed,
+            ttsElapsed,
         ],
     )
 }
