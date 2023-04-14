@@ -433,14 +433,22 @@ async function processUserMessage(
         }
     }
 
-    const { answer, messageId: answerMessageId } = await streamTokensToTelegram(
-        chatId,
-        messageId,
-        tokens,
-    )
+    const {
+        answer,
+        messageId: answerMessageId,
+        tokenCount,
+    } = await streamTokensToTelegram(chatId, messageId, tokens)
     const gptElapsed = Date.now() - gptStart
     const promptTokens = countTokens(userText)
-    const answerTokens = countTokens(answer)
+    const answerTokens = tokenCount // countTokens(answer)
+    // How accurate is our token counter?
+    if (tokenCount !== countTokens(answer)) {
+        console.log(
+            `WARNING token-count-mismatch: tokenCount (${tokenCount}) !== countTokens(answer) (${countTokens(
+                answer,
+            )})`,
+        )
+    }
     const prompt = await db.insertAnswer({
         userId,
         chatId,
@@ -837,7 +845,8 @@ async function streamTokensToTelegram(
     chatId: number,
     initMessageId: number,
     tokenIterator: AsyncGenerator<string>,
-) {
+): Promise<{ answer: string; tokenCount: number; messageId: number }> {
+    let tokenCount = 0
     let buf = '' // Latest buffer
     let sentBuf = '' // A snapshot of the buffer that was sent so we know when it has changed.
     let prevId: number | undefined
@@ -864,6 +873,7 @@ async function streamTokensToTelegram(
 
     try {
         for await (const token of tokenIterator) {
+            tokenCount++
             buf += token
             if (!prevId) {
                 prevId = await telegram
@@ -889,5 +899,6 @@ async function streamTokensToTelegram(
     return {
         answer: buf,
         messageId: prevId!,
+        tokenCount,
     }
 }
