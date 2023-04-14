@@ -181,12 +181,14 @@ export class TelegramClient {
         formData.append('reply_to_message_id', String(messageId))
         formData.append('caption', caption.slice(0, 1024))
 
-        const blob = new Blob([], {
-            type: 'audio/ogg',
+        // Need to launder our own { stream(): <impl> } into FormData by looking like a File.
+        formData.set('voice', {
+            [Symbol.toStringTag]: 'File',
+            size: byteLength,
+            name: `${chatId}-${messageId}.ogg`,
+            //@ts-expect-error
+            stream: () => readable,
         })
-        //@ts-expect-error
-        blob.stream = () => readable
-        formData.append('voice', blob, `${chatId}-${messageId}.ogg`)
 
         const response = await fetch(url, {
             method: 'POST',
