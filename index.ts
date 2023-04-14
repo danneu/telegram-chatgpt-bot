@@ -42,7 +42,7 @@ async function initializeBot() {
 
     botUsername = await telegram.getMe().then((x) => x.username)
 
-    await telegram.setMyCommands([
+    const commands = [
         {
             command: 'voice',
             description: 'set bot language',
@@ -64,11 +64,25 @@ async function initializeBot() {
             command: 'clear',
             description: 'reset chat context',
         },
-        {
-            command: 'ai',
-            description: 'send message to bot (only needed in group chat)',
-        },
-    ])
+        // {
+        //     command: 'ai',
+        //     description: 'send message to bot (only needed in group chat)',
+        // },
+    ]
+
+    // Don't broadcast /gpt commands unless user has a choice.
+    if (config.GPT4_ENABLED) {
+        commands.push({
+            command: 'gpt3',
+            description: 'use gpt-3.5-turbo model',
+        })
+        commands.push({
+            command: 'gpt4',
+            description: 'use gpt-4 model',
+        })
+    }
+
+    await telegram.setMyCommands(commands)
 }
 
 ////////////////////////////////////////////////////////////
@@ -419,7 +433,11 @@ async function processUserMessage(
     const gptStart = Date.now()
     let tokens
     try {
-        tokens = await openai.streamChatCompletions(messages, chat.temperature)
+        tokens = await openai.streamChatCompletions(
+            messages,
+            chat.model,
+            chat.temperature,
+        )
     } catch (err) {
         if (err.response?.status === 429) {
             await telegram.sendMessage(
@@ -437,7 +455,7 @@ async function processUserMessage(
         answer,
         messageId: answerMessageId,
         tokenCount,
-    } = await streamTokensToTelegram(chatId, messageId, tokens)
+    } = await streamTokensToTelegram(chatId, messageId, tokens, chat.model)
     const gptElapsed = Date.now() - gptStart
     const promptTokens = countTokens(userText)
     const answerTokens = tokenCount // countTokens(answer)
@@ -551,6 +569,7 @@ async function handleCommand(
             `
 Bot info:
 
+- Model: ${chat.model}
 - Voice: ${prettyVoice(chat.voice) || '--'} 
 - Voice responses: ${chat.send_voice ? '🔊 On' : '🔇 Off'}
 - Temperature: ${chat.temperature.toFixed(1)}
@@ -580,6 +599,35 @@ Bot info:
             messageId,
         )
         return
+    } else if (command.cmd === '/whoami') {
+        // Tell me my Telegram ID
+        await telegram.sendMessage(
+            chatId,
+            `Your Telegram ID is ${userId}.`,
+            messageId,
+        )
+        return
+    } else if (['/gpt3', '/gpt4'].includes(command.cmd)) {
+        if (
+            config.GPT4_ENABLED === '*' ||
+            config.GPT4_ENABLED.includes(userId)
+        ) {
+            const model = command.cmd === '/gpt3' ? 'gpt-3.5-turbo' : 'gpt-4'
+            await db.setModel(chatId, model)
+            await telegram.sendMessage(
+                chatId,
+                `Using model ${model}`,
+                messageId,
+            )
+            return
+        } else {
+            await telegram.sendMessage(
+                chatId,
+                `Sorry, you don't have permission to use GPT-4.`,
+                messageId,
+            )
+            return
+        }
     } else if (command.cmd === '/temp') {
         await telegram.indicateTyping(chatId)
         await telegram.request('sendMessage', {
@@ -845,6 +893,7 @@ async function streamTokensToTelegram(
     chatId: number,
     initMessageId: number,
     tokenIterator: AsyncGenerator<string>,
+    model: 'gpt-3.5-turbo' | 'gpt-4',
 ): Promise<{ answer: string; tokenCount: number; messageId: number }> {
     let tokenCount = 0
     let buf = '' // Latest buffer
@@ -853,6 +902,8 @@ async function streamTokensToTelegram(
     let isFinished = false
     // https://en.wikipedia.org/wiki/Block_Elements
     const cursor = '▍'
+    // Only prefix GPT-4 since it's expensive.
+    const prefix = model === 'gpt-4' ? '(GPT-4) ' : ''
 
     // Call after prevId is set.
     async function editLoop() {
@@ -862,7 +913,7 @@ async function streamTokensToTelegram(
         if (sentBuf !== buf) {
             sentBuf = buf
             await telegram
-                .editMessageText(chatId, prevId!, buf + cursor)
+                .editMessageText(chatId, prevId!, prefix + buf + cursor)
                 .catch((err) => {
                     // Don't crash on error
                     console.error(err)
@@ -877,7 +928,7 @@ async function streamTokensToTelegram(
             buf += token
             if (!prevId) {
                 prevId = await telegram
-                    .sendMessage(chatId, cursor, initMessageId)
+                    .sendMessage(chatId, prefix + cursor, initMessageId)
                     .then((msg) => msg.message_id)
 
                 // Start the edit loop after we have our first message so that at least 1000ms of tokens have
@@ -894,7 +945,7 @@ async function streamTokensToTelegram(
     isFinished = true // Stop the send loop from continuing.
 
     // One final send, also removes the cursor.
-    await telegram.editMessageText(chatId, prevId!, buf)
+    await telegram.editMessageText(chatId, prevId!, prefix + buf)
 
     return {
         answer: buf,

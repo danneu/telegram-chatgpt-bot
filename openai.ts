@@ -24,11 +24,12 @@ export async function transcribeAudio(mp3Stream: Readable) {
 
 export async function* streamChatCompletions(
     messages: db.Message[],
+    model: 'gpt-3.5-turbo' | 'gpt-4',
     temperature: number,
 ): AsyncGenerator<string> {
     const response = await openai.createChatCompletion(
         {
-            model: 'gpt-3.5-turbo',
+            model,
             messages,
             temperature,
             stream: true,

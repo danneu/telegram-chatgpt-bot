@@ -40,6 +40,27 @@ export const PORT = process.env.PORT || 8080
 
 export const MASTER_PROMPT = process.env.MASTER_PROMPT
 
+type GPT4Enabled = '*' | number[] | undefined
+
+// GPT4_ENABLED="*" to enable for all users
+// GPT4_ENABLED="123456789,987654321,444444444" to enable for a specific Telegram IDs
+export const GPT4_ENABLED: '*' | number[] | undefined = (() => {
+    const value = process.env.GPT4_ENABLED
+    if (!value) {
+        return undefined
+    } else if (value === '*') {
+        return '*'
+    } else {
+        const ids = value?.split(',').map((id) => parseInt(id))
+        if (ids?.some((id) => isNaN(id))) {
+            throw new Error(
+                `GPT4_ENABLED env var has invalid format. Expected "*" or comma separated list of numbers but got "${value}"`,
+            )
+        }
+        return ids
+    }
+})()
+
 // const config = {
 //     PORT: process.env.PORT || 8080,
 //     DATABASE_URL: process.env.DATABASE_URL,

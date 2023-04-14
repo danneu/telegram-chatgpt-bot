@@ -139,6 +139,21 @@ export async function insertAnswer({
     )
 }
 
+// `model` should be listed: https://platform.openai.com/docs/models/model-endpoint-compatibility
+export async function setModel(
+    chatId: number,
+    model: 'gpt-3.5-turbo' | 'gpt-4',
+) {
+    return pool.query(
+        `
+    update chats
+    set model = $2
+    where id = $1
+    `,
+        [chatId, model],
+    )
+}
+
 export async function setTemperature(chatId: number, temperature: number) {
     assert(
         0 <= temperature && temperature <= 1.0,
@@ -236,6 +251,7 @@ export type User = {
 export type Chat = {
     id: number
     type: 'private' | 'group' | 'supergroup' | 'channel'
+    model: 'gpt-3.5-turbo' | 'gpt-4'
     voice: string | undefined
     send_voice: boolean
     temperature: number

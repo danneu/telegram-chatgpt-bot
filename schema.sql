@@ -17,8 +17,11 @@ create table chats (
     temperature numeric(2, 1) not null default 0.8,
     send_voice boolean not null default true,
     uname text null, -- just useful for debug
+    model: text not null default 'gpt-3.5-turbo',
     created_at timestamptz not null default now()
 );
+
+alter table chats add column model text not null default 'gpt-3.5-turbo';
 
 
 create table prompts (
