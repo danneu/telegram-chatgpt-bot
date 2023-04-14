@@ -471,7 +471,7 @@ async function processUserMessage(
             chat.model,
             chat.temperature,
         )
-    } catch (err) {
+    } catch (err: any) {
         if (err.response?.status === 429) {
             await telegram.sendMessage(
                 chatId,
@@ -523,12 +523,13 @@ async function processUserMessage(
         const languageResult = await openai.detectLanguage(answer)
         let finalVoice = chat.voice ?? voz.DEFAULT_VOICE
         if (languageResult.kind === 'success') {
-            const voice = voz.voiceFromLanguageCode(languageResult.code)
-            if (voice !== undefined && voice !== chat.voice) {
-                console.log('Changing voice to', voice)
-                finalVoice = voice
-            } else {
-                console.log('did not change voice. is still: ', chat.voice)
+            // If languageResult is different from configured voice, then use languageResult
+            // for the synthesized voice.
+            if (languageResult.code !== chat.voice?.split('-')[0]) {
+                const voice = voz.voiceFromLanguageCode(languageResult.code)
+                if (voice !== undefined) {
+                    finalVoice = voice
+                }
             }
         }
 
@@ -861,7 +862,7 @@ async function handleWebhookUpdate(update: t.Update): Promise<void> {
         }
 
         // We handle private chats and group chats here.
-        let promise
+        let promise = Promise.resolve()
         if (chat.type === 'private') {
             promise = processUserMessage(user, chat, message)
         } else if (chat.type === 'group') {
@@ -869,9 +870,9 @@ async function handleWebhookUpdate(update: t.Update): Promise<void> {
         }
 
         await promise
-            .catch(async (err: any) => {
+            .catch((err: any) => {
                 console.error(err)
-                return await telegram.sendMessage(
+                return telegram.sendMessage(
                     chat.id,
                     '❌ Something went wrong and the bot could not respond to your message. Try again soon?',
                     message.message_id,
@@ -908,9 +909,9 @@ async function handleWebhookUpdate(update: t.Update): Promise<void> {
             messageId,
             callbackQueryId,
             callbackData,
-        ).catch(async (err) => {
+        ).catch((err) => {
             console.error(err)
-            return await telegram.sendMessage(
+            return telegram.sendMessage(
                 chatId,
                 '❌ Something went wrong and the bot could not respond to your message. Try again soon?',
                 messageId,
