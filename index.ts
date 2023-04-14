@@ -23,7 +23,6 @@ let botUsername = ''
 
 const PER_USER_CONCURRENCY = 3
 // Mapping of user_id to the number of requests they have in flight.
-// const inflights: Record<number, number> = {}
 const inflights = new Map<number, number>()
 
 async function initializeBot(): Promise<void> {
@@ -80,12 +79,8 @@ async function initializeBot(): Promise<void> {
     // Don't broadcast /gpt commands unless user has a choice.
     if (config.GPT4_ENABLED !== undefined) {
         commands.push({
-            command: 'gpt3',
-            description: 'use gpt-3.5-turbo model',
-        })
-        commands.push({
-            command: 'gpt4',
-            description: 'use gpt-4 model',
+            command: 'model',
+            description: 'choose gpt-3.5 vs gpt-4',
         })
     }
 
@@ -222,6 +217,7 @@ const VOICE_MENU: Record<string, any> = {
 // async function handleCallbackQuery(body: t.CallbackQuery) {
 async function handleCallbackQuery(
     chatId: number,
+    userId: number,
     messageId: number,
     callbackQueryId: string,
     callbackData: string,
@@ -235,112 +231,128 @@ async function handleCallbackQuery(
         let temperature = Number.parseFloat(callbackData.split(':')[1])
         if (temperature < 0) temperature = 0
         if (temperature > 1) temperature = 1
-        console.log('setting temp', temperature)
         await db.setTemperature(chatId, temperature)
         // https://core.telegram.org/bots/api#answercallbackquery
         await telegram.sendMessage(
             chatId,
             `🌡️ Temperature changed to ${temperature.toFixed(1)}`,
         )
-        return
-    }
-
-    // voice:English --> show the countries
-    // voice:English:US --> show the US voices
-    // voice:English:US:Jenny -> pick the Jenny voice
-    const segments: string[] = callbackData.split(':')
-    switch (segments.length) {
-        // voice --> Show the language selections
-        case 1:
-            {
-                const langs = Object.keys(VOICE_MENU)
-                const inlineKeyboard = util.chunksOf(2, langs).map((chunk) => {
-                    return chunk.map((lang) => {
-                        return {
-                            text: lang,
-                            callback_data: `voice:${lang}`,
-                        }
-                    })
-                })
-                await telegram.editMessageReplyMarkup(
-                    chatId,
-                    messageId,
-                    inlineKeyboard,
-                )
+    } else if (callbackData.startsWith('model:')) {
+        if (hasGpt4Permission(userId)) {
+            const model = callbackData.split(':')[1]
+            if (model !== 'gpt-3.5-turbo' && model !== 'gpt-4') {
+                return
             }
-            return
-        // voice:English --> List the countries available for English
-        case 2:
-            {
-                // TODO: handle VOICE_MENU[segments[1]] returns nothing
-                const countryNames = Object.keys(VOICE_MENU[segments[1]])
-                const inlineKeyboard = [
-                    [{ text: '⏪ Back', callback_data: 'voice' }],
-                ].concat(
-                    util.chunksOf(2, countryNames).map((chunk) => {
-                        return chunk.map((countryName) => {
-                            return {
-                                text: countryName,
-                                callback_data: `voice:${segments[1]}:${countryName}`,
-                            }
-                        })
-                    }),
-                )
-                await telegram.editMessageReplyMarkup(
-                    chatId,
-                    messageId,
-                    inlineKeyboard,
-                )
-            }
-            return
-        // voice:English:US --> List the voices available for US English
-        case 3:
-            {
-                const inlineKeyboard = [
-                    [
-                        {
-                            text: '⏪ Back',
-                            callback_data: `voice:${segments[1]}`,
-                        },
-                    ],
-                ].concat(
-                    util
-                        .chunksOf<[string, string]>(
-                            2,
-                            Object.entries(
-                                VOICE_MENU[segments[1]][segments[2]],
-                            ),
-                        )
+            await db.setModel(chatId, model)
+            // https://core.telegram.org/bots/api#answercallbackquery
+            await Promise.all([
+                telegram.answerCallbackQuery(
+                    callbackQueryId,
+                    `✅ Model changed to ${model}`,
+                ),
+                telegram.sendMessage(chatId, `Model changed to ${model}`),
+            ])
+        }
+    } else if (callbackData.startsWith('voice:')) {
+        // voice:English --> show the countries
+        // voice:English:US --> show the US voices
+        // voice:English:US:Jenny -> pick the Jenny voice
+        const segments: string[] = callbackData.split(':')
+        switch (segments.length) {
+            // voice --> Show the language selections
+            case 1:
+                {
+                    const langs = Object.keys(VOICE_MENU)
+                    const inlineKeyboard = util
+                        .chunksOf(2, langs)
                         .map((chunk) => {
-                            return chunk.map(([name, code]) => {
+                            return chunk.map((lang) => {
                                 return {
-                                    text: name,
-                                    callback_data: `voice:${segments[1]}:${segments[2]}:${code}`,
+                                    text: lang,
+                                    callback_data: `voice:${lang}`,
+                                }
+                            })
+                        })
+                    await telegram.editMessageReplyMarkup(
+                        chatId,
+                        messageId,
+                        inlineKeyboard,
+                    )
+                }
+                return
+            // voice:English --> List the countries available for English
+            case 2:
+                {
+                    // TODO: handle VOICE_MENU[segments[1]] returns nothing
+                    const countryNames = Object.keys(VOICE_MENU[segments[1]])
+                    const inlineKeyboard = [
+                        [{ text: '⏪ Back', callback_data: 'voice' }],
+                    ].concat(
+                        util.chunksOf(2, countryNames).map((chunk) => {
+                            return chunk.map((countryName) => {
+                                return {
+                                    text: countryName,
+                                    callback_data: `voice:${segments[1]}:${countryName}`,
                                 }
                             })
                         }),
-                )
+                    )
+                    await telegram.editMessageReplyMarkup(
+                        chatId,
+                        messageId,
+                        inlineKeyboard,
+                    )
+                }
+                return
+            // voice:English:US --> List the voices available for US English
+            case 3:
+                {
+                    const inlineKeyboard = [
+                        [
+                            {
+                                text: '⏪ Back',
+                                callback_data: `voice:${segments[1]}`,
+                            },
+                        ],
+                    ].concat(
+                        util
+                            .chunksOf<[string, string]>(
+                                2,
+                                Object.entries(
+                                    VOICE_MENU[segments[1]][segments[2]],
+                                ),
+                            )
+                            .map((chunk) => {
+                                return chunk.map(([name, code]) => {
+                                    return {
+                                        text: name,
+                                        callback_data: `voice:${segments[1]}:${segments[2]}:${code}`,
+                                    }
+                                })
+                            }),
+                    )
 
-                // Note: I originally sent editMessageReplyMarkup and editMessage at the same time,
-                // the latter updating the menu message text, but there's a race condition that would
-                // prevent the inline keyboard from updating, so now I don't update the message text.
-                await telegram.editMessageReplyMarkup(
-                    chatId,
-                    messageId,
-                    inlineKeyboard,
+                    // Note: I originally sent editMessageReplyMarkup and editMessage at the same time,
+                    // the latter updating the menu message text, but there's a race condition that would
+                    // prevent the inline keyboard from updating, so now I don't update the message text.
+                    await telegram.editMessageReplyMarkup(
+                        chatId,
+                        messageId,
+                        inlineKeyboard,
+                    )
+                }
+                return
+            // voice:English:US:en-US-JennyNeural --> Pick this voice
+            case 4: {
+                const newVoice = segments[3]
+                await db.changeVoice(chatId, newVoice)
+                // https://core.telegram.org/bots/api#answercallbackquery
+                await telegram.answerCallbackQuery(
+                    callbackQueryId,
+                    `✅ Voice changed to ${newVoice}`,
                 )
+                await telegram.deleteMessage(chatId, messageId)
             }
-            return
-        // voice:English:US:en-US-JennyNeural --> Pick this voice
-        case 4: {
-            const newVoice = segments[3]
-            await db.changeVoice(chatId, newVoice)
-            // https://core.telegram.org/bots/api#answercallbackquery
-            await telegram.answerCallbackQuery(
-                callbackQueryId,
-                `✅ Voice changed to ${newVoice}`,
-            )
-            await telegram.deleteMessage(chatId, messageId)
         }
     }
 }
@@ -649,28 +661,7 @@ Bot info:
             `Your Telegram ID is ${userId}.`,
             messageId,
         )
-    } else if (['/gpt3', '/gpt4'].includes(command.cmd)) {
-        if (
-            config.GPT4_ENABLED === '*' ||
-            (Array.isArray(config.GPT4_ENABLED) &&
-                config.GPT4_ENABLED.includes(userId))
-        ) {
-            const model = command.cmd === '/gpt4' ? 'gpt-4' : 'gpt-3.5-turbo'
-            await db.setModel(chatId, model)
-            await telegram.sendMessage(
-                chatId,
-                `Using model ${model}`,
-                messageId,
-            )
-        } else {
-            await telegram.sendMessage(
-                chatId,
-                `Sorry, you don't have permission to use GPT-4.`,
-                messageId,
-            )
-        }
     } else if (command.cmd === '/temp') {
-        await telegram.indicateTyping(chatId)
         await telegram.request('sendMessage', {
             chat_id: chatId,
             text: `Select temperature from less random (0.0) to more random (1.0).\n\nCurrent: ${chat.temperature.toFixed(
@@ -689,6 +680,33 @@ Bot info:
                 ],
             }),
         })
+    } else if (command.cmd === '/model') {
+        if (hasGpt4Permission(userId)) {
+            await telegram.request('sendMessage', {
+                chat_id: chatId,
+                text: 'Select a ChatGPT model.',
+                reply_markup: JSON.stringify({
+                    inline_keyboard: [
+                        [
+                            {
+                                text: 'GPT-3.5 (Fastest)',
+                                callback_data: 'model:gpt-3.5-turbo',
+                            },
+                            {
+                                text: 'GPT-4 (Smarter, slower)',
+                                callback_data: 'model:gpt-4',
+                            },
+                        ],
+                    ],
+                }),
+            })
+        } else {
+            await telegram.sendMessage(
+                chatId,
+                `Sorry, you don't have permission to use GPT-4.`,
+                messageId,
+            )
+        }
     } else if (command.cmd === '/voice') {
         await telegram.indicateTyping(chatId)
         const langs = Object.keys(VOICE_MENU)
@@ -873,17 +891,20 @@ async function handleWebhookUpdate(update: t.Update): Promise<void> {
         if (
             update.callback_query.message === undefined ||
             update.callback_query.message.chat === undefined ||
+            update.callback_query.from?.id === undefined ||
             typeof update.callback_query.data !== 'string'
         ) {
             return
         }
 
         const chatId = update.callback_query.message.chat.id
+        const userId = update.callback_query.from.id
         const messageId = update.callback_query.message.message_id
         const callbackQueryId = update.callback_query.id
         const callbackData = update.callback_query.data
         await handleCallbackQuery(
             chatId,
+            userId,
             messageId,
             callbackQueryId,
             callbackData,
@@ -1001,5 +1022,18 @@ async function streamTokensToTelegram(
         answer: buf,
         messageId: prevId,
         tokenCount,
+    }
+}
+
+function hasGpt4Permission(userId: number): boolean {
+    if (config.GPT4_ENABLED === '*') {
+        return true
+    } else if (
+        Array.isArray(config.GPT4_ENABLED) &&
+        config.GPT4_ENABLED.includes(userId)
+    ) {
+        return true
+    } else {
+        return false
     }
 }
