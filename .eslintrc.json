@@ -10,5 +10,15 @@
         "sourceType": "module",
         "project": ["./tsconfig.json"]
     },
-    "rules": {}
+    "rules": {
+        // https://typescript-eslint.io/rules/promise-function-async/
+        //
+        // Otherwise the default rule prevents `fetch().then(x => x.json())`.
+        "@typescript-eslint/promise-function-async": [
+            "error",
+            {
+                "checkArrowFunctions": false
+            }
+        ]
+    }
 }

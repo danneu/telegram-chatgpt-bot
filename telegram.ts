@@ -1,6 +1,5 @@
-import { File as WebFile } from 'buffer'
 import * as config from './config'
-import { Readable } from 'stream'
+import { type Readable } from 'stream'
 
 // A minimal Telegram bot client that implements only the methods and options
 // that I need.
@@ -13,25 +12,22 @@ export class TelegramClient {
     }
 
     // TODO: make private
-    async request(method: string, params: { [key: string]: any } = {}) {
+    async request(
+        method: string,
+        params: Record<string, any> = {},
+    ): Promise<Response> {
         const url = `https://api.telegram.org/bot${this.token}/${method}`
 
         console.log(`makeTelegramRequest`, url /* params */)
 
         // SLOPPY: Come up with deliberate error handling.
-        let response
-        try {
-            response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(params, null, 2),
-            })
-        } catch (err: any) {
-            err.response = response
-            throw err
-        }
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(params, null, 2),
+        })
 
         if (response.status !== 200) {
             const err = new Error('Telegram API non-200 response')
@@ -51,27 +47,30 @@ export class TelegramClient {
         return response
     }
 
-    async getMe() {
-        return this.request('getMe')
+    // https://core.telegram.org/bots/api#getme
+    async getMe(): Promise<User> {
+        return await this.request('getMe')
             .then((x) => x.json())
             .then((x) => x.result as User)
     }
 
-    async setMyCommands(commands: { command: string; description: string }[]) {
-        return this.request('setMyCommands', {
+    // https://core.telegram.org/bots/api#setmycommands
+    async setMyCommands(
+        commands: Array<{ command: string; description: string }>,
+    ): Promise<void> {
+        await this.request('setMyCommands', {
             commands: JSON.stringify(commands),
         })
     }
 
-    async getWebhookInfo(): Promise<{ url: string }> {
-        const body = await this.request('getWebhookInfo').then((x) => x.json())
-        return {
-            url: body.result.url,
-        }
+    // https://core.telegram.org/bots/api#getwebhookinfo
+    async getWebhookInfo(): Promise<WebhookInfo> {
+        return await this.request('getWebhookInfo').then((x) => x.json())
     }
 
-    async setWebhook({ url }: { url: string }) {
-        return this.request('setWebhook', {
+    // https://core.telegram.org/bots/api#setwebhook
+    async setWebhook({ url }: { url: string }): Promise<void> {
+        await this.request('setWebhook', {
             url,
         })
     }
@@ -83,7 +82,7 @@ export class TelegramClient {
         text: string,
         replyToMessageId?: number,
         silent = false,
-        replyMarkup?: { [key: string]: any },
+        replyMarkup?: Record<string, any>,
     ): Promise<Message> {
         const body = await this.request('sendMessage', {
             chat_id: chatId,
@@ -100,8 +99,15 @@ export class TelegramClient {
         return body
     }
 
-    async answerCallbackQuery(callbackQueryId: string, text: string) {
-        return this.request('answerCallbackQuery', {
+    // Note: Sending empty string is good enough to dismiss the "Loading..." alert
+    // that appears at top of chat when callback query is sent.
+    //
+    // https://core.telegram.org/bots/api#answercallbackquery
+    async answerCallbackQuery(
+        callbackQueryId: string,
+        text: string,
+    ): Promise<void> {
+        await this.request('answerCallbackQuery', {
             callback_query_id: callbackQueryId,
             text,
         })
@@ -115,7 +121,7 @@ export class TelegramClient {
         replyToMessageId: number,
         // If true, not even the first message will trigger notification
         silent = false,
-    ) {
+    ): AsyncGenerator<Response> {
         let prevId = replyToMessageId
 
         for (const chunk of stringChunksOf(4096, text)) {
@@ -133,15 +139,17 @@ export class TelegramClient {
         }
     }
 
-    async indicateTyping(chatId: number) {
-        return this.request('sendChatAction', {
+    // https://core.telegram.org/bots/api#sendchataction
+    async indicateTyping(chatId: number): Promise<void> {
+        await this.request('sendChatAction', {
             chat_id: chatId,
             action: 'typing',
         })
     }
 
-    async deleteMessage(chatId: number, messageId: number) {
-        return this.request('deleteMessage', {
+    // https://core.telegram.org/bots/api#deletemessage
+    async deleteMessage(chatId: number, messageId: number): Promise<void> {
+        await this.request('deleteMessage', {
             chat_id: chatId,
             message_id: messageId,
         })
@@ -153,13 +161,15 @@ export class TelegramClient {
     //       file_size: 6493,
     //       file_path: 'voice/file_0.oga'
     //   }
-    async getFile(fileId: string) {
-        return this.request('getFile', { file_id: fileId })
+    //
+    // https://core.telegram.org/bots/api#getfile
+    async getFile(fileId: string): Promise<File> {
+        return await this.request('getFile', { file_id: fileId })
             .then((x) => x.json())
             .then((x) => x.result as File)
     }
 
-    async getFileUrl(fileId: string) {
+    async getFileUrl(fileId: string): Promise<string> {
         const file = await this.getFile(fileId)
         const url = `https://api.telegram.org/file/bot${config.TELEGRAM_BOT_TOKEN}/${file.file_path}`
         return url
@@ -173,7 +183,7 @@ export class TelegramClient {
         readable: Readable,
         // TODO: Upload without knowing byteLength.
         byteLength: number,
-    ) {
+    ): Promise<Message> {
         const url = `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/sendVoice`
 
         const formData = new FormData()
@@ -186,7 +196,7 @@ export class TelegramClient {
             [Symbol.toStringTag]: 'File',
             size: byteLength,
             name: `${chatId}-${messageId}.ogg`,
-            //@ts-expect-error
+            // @ts-expect-error: Can't normally set stream property
             stream: () => readable,
         })
 
@@ -194,62 +204,71 @@ export class TelegramClient {
             method: 'POST',
             body: formData,
         })
-        const responseBody = await response.json()
 
+        const message = (await response.json()) as Message
+        return message
+
+        //
         // Send additional message if caption was truncated (1024 chars)
-        if (caption.length > 1024) {
-            for await (const _ of this.sendMessageChain(
-                chatId,
-                caption.slice(1024),
-                responseBody.result.message_id,
-                true,
-            )) {
-            }
-        }
+        // if (caption.length > 1024) {
+        //     for await (const _ of this.sendMessageChain(
+        //         chatId,
+        //         caption.slice(1024),
+        //         responseBody.result.message_id,
+        //         true,
+        //     )) {
+        //     }
+        // }
     }
 
-    async editMessageText(chatId: number, messageId: number, text: string) {
-        return this.request('editMessageText', {
+    // https://core.telegram.org/bots/api#editmessagetext
+    async editMessageText(
+        chatId: number,
+        messageId: number,
+        text: string,
+    ): Promise<Message> {
+        return await this.request('editMessageText', {
             chat_id: chatId,
             message_id: messageId,
             text,
-        })
+        }).then((x) => x.json())
     }
 
+    // https://core.telegram.org/bots/api#editmessagereplymarkup
     async editMessageReplyMarkup(
         chatId: number,
         messageId: number,
-        inlineKeyboard: { [key: string]: any },
-    ) {
+        inlineKeyboard: Record<string, any>,
+    ): Promise<Message> {
         console.log(
             `[editMessageReplyMarkup] chatId=${chatId} messageId=${messageId}`,
         )
-        return this.request('editMessageReplyMarkup', {
+        return await this.request('editMessageReplyMarkup', {
             chat_id: chatId,
             message_id: messageId,
             reply_markup: JSON.stringify({
                 inline_keyboard: inlineKeyboard,
             }),
-        })
+        }).then((x) => x.json())
     }
 }
 
-function* stringChunksOf(length: number, text: string) {
+function* stringChunksOf(length: number, text: string): Generator<string> {
     let i = 0
     while (true) {
         const slice = text.slice(i * length, (i + 1) * length)
-        if (!slice) break
+        if (slice.length === 0) break
         yield slice
         i++
     }
 }
 
-////////////////////////////////////////////////////////////
+// =========================================================
 // Telegram API types
 //
 // I don't want to go overboard here. These should only be the types that
 // my bot needs so I don't have to keep looking at docs.
-////////////////////////////////////////////////////////////
+// =========================================================
 
 // https://core.telegram.org/bots/api#update
 export type Update = {
@@ -257,7 +276,7 @@ export type Update = {
 } & ({ message: Message } | { callback_query: CallbackQuery })
 
 // https://core.telegram.org/bots/api#message
-export type Message = {
+export interface Message {
     message_id: number
     from?: User
     text?: string
@@ -266,7 +285,7 @@ export type Message = {
 }
 
 // https://core.telegram.org/bots/api#voice
-type Voice = {
+interface Voice {
     file_id: string
     file_unique_id: string
     duration: number
@@ -275,7 +294,7 @@ type Voice = {
 }
 
 // https://core.telegram.org/bots/api#callbackquery
-export type CallbackQuery = {
+export interface CallbackQuery {
     id: string
     data?: string
     from?: User
@@ -283,23 +302,27 @@ export type CallbackQuery = {
 }
 
 // https://core.telegram.org/bots/api#user
-type User = {
+interface User {
     id: number
     username: string
     language_code: string
 }
 
 // https://core.telegram.org/bots/api#chat
-type Chat = {
+interface Chat {
     id: number
     type: 'private' | 'group' | 'supergroup' | 'channel'
     username?: string
 }
 
 // https://core.telegram.org/bots/api#file
-type File = {
+interface File {
     file_id: string
     file_unique_id: string
     file_size: number
     file_path: string
+}
+
+interface WebhookInfo {
+    url: string
 }
