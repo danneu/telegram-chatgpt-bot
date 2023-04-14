@@ -298,7 +298,7 @@ async function handleCallbackQuery(
                 ),
             ])
         }
-    } else if (callbackData.startsWith('voice:')) {
+    } else if (callbackData === 'voice' || callbackData.startsWith('voice:')) {
         // voice:English --> show the countries
         // voice:English:US --> show the US voices
         // voice:English:US:Jenny -> pick the Jenny voice
