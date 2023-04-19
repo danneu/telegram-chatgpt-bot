@@ -557,14 +557,14 @@ async function completeAndSendAnswer(
                 switch (role) {
                     case 'system':
                     case 'user':
-                        prompt += `A: ${content}\n`
+                        prompt += `User: ${content}\n`
                         break
                     case 'assistant':
-                        prompt += `B: ${content}\n`
+                        prompt += `Helper: ${content}\n`
                         break
                 }
             }
-            prompt += 'B: '
+            prompt += 'Helper: '
             // console.log(prompt)
             tokens = openai.streamTextCompletions(prompt, chat.temperature)
         } else {
