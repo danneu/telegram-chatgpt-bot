@@ -9,6 +9,8 @@
 // * = I chose these voices because they sound the best to me. Otherwise, I use the first female/male voice
 // on Azure's voice list.
 const DEFAULT_VOICES: Record<string, string[]> = {
+    // Arabic
+    ar: ['ar-EG-SalmaNeural ', 'ar-EG-ShakirNeural'],
     // Dutch
     nl: ['nl-NL-ColetteNeural', 'nl-NL-MaartenNeural'],
     // French
@@ -26,7 +28,6 @@ const DEFAULT_VOICES: Record<string, string[]> = {
         'es-HN-KarlaNeural', // * More animated than default
         'es-MX-CecilioNeural',
     ],
-
     // English
     en: [
         'en-US-JaneNeural', // * More fun than Jenny
