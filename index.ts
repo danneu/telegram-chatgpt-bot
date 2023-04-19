@@ -587,22 +587,16 @@ async function completeAndSendAnswer(
         }
     }
 
-    const {
-        answer,
-        messageId: answerMessageId,
-        tokenCount,
-    } = await streamTokensToTelegram(chat.id, messageId, tokens, chat.model)
+    const { answer, messageId: answerMessageId } = await streamTokensToTelegram(
+        chat.id,
+        messageId,
+        // TODO: Chunks don't actually map to tokens. I should rename.
+        tokens,
+        chat.model,
+    )
     const gptElapsed = Date.now() - gptStart
     const promptTokens = countTokens(userText)
-    const answerTokens = tokenCount // countTokens(answer)
-    // How accurate is our token counter?
-    if (tokenCount !== countTokens(answer)) {
-        console.log(
-            `WARNING token-count-mismatch: tokenCount (${tokenCount}) !== countTokens(answer) (${countTokens(
-                answer,
-            )})`,
-        )
-    }
+    const answerTokens = countTokens(answer)
 
     // Send trailing voice memo.
     let ttsElapsed: number | undefined
@@ -1133,11 +1127,11 @@ initializeBot()
 async function streamTokensToTelegram(
     chatId: number,
     initMessageId: number,
+    // TODO: Chunks don't actually represent tokens. Rename.
     tokenIterator: AsyncGenerator<string>,
     model: db.Model,
-): Promise<{ answer: string; tokenCount: number; messageId: number }> {
+): Promise<{ answer: string; messageId: number }> {
     const interval = 2000
-    let tokenCount = 0
     let buf = '' // Latest buffer
     let sentBuf = '' // A snapshot of the buffer that was sent so we know when it has changed.
     let prevId: number | undefined
@@ -1187,9 +1181,9 @@ async function streamTokensToTelegram(
     }
 
     try {
-        for await (const token of tokenIterator) {
-            tokenCount++
-            buf += token
+        // Note: Stream chunks don't actually represent tokens. I should change the names.
+        for await (const chunk of tokenIterator) {
+            buf += chunk
             if (typeof prevId !== 'number') {
                 prevId = await telegram
                     .sendMessage(chatId, prefix + cursor, initMessageId)
@@ -1220,7 +1214,6 @@ async function streamTokensToTelegram(
     return {
         answer: buf,
         messageId: prevId,
-        tokenCount,
     }
 }
 
