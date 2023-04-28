@@ -28,7 +28,10 @@ const inflights = new Map<number, number>()
 // Used as a crude rate limiter for the demo bot.
 const promptCounts = new Map<number, number>()
 
-async function initializeBot(): Promise<void> {
+async function initializeBot(): Promise<{
+    botUsername: string
+    webhookUrl: string
+}> {
     // https://core.telegram.org/bots/api#authorizing-your-bot
     // Check if webhook: https://core.telegram.org/bots/api#getwebhookinfo
     const webhookInfo = await telegram.getWebhookInfo()
@@ -40,6 +43,7 @@ async function initializeBot(): Promise<void> {
         })
     }
 
+    // HACK: Assigning to global
     botUsername = await telegram.getMe().then((x) => x.username)
 
     const commands = [
@@ -81,6 +85,11 @@ async function initializeBot(): Promise<void> {
     ]
 
     await telegram.setMyCommands(commands)
+
+    return {
+        botUsername,
+        webhookUrl: config.WEBHOOK_URL,
+    }
 }
 
 // SERVER
@@ -1104,8 +1113,10 @@ router.post('/telegram', async (ctx: Koa.DefaultContext) => {
 app.use(router.middleware())
 
 initializeBot()
-    .then(() => {
-        console.log('bot initialized')
+    .then((info) => {
+        console.log(
+            `bot initialized. @${info.botUsername} receiving webhooks at ${info.webhookUrl}`,
+        )
         app.listen(config.PORT, () => {
             console.log(`listening on localhost:${config.PORT}`)
         })

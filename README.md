@@ -135,7 +135,7 @@ Set up the Node project:
 git clone https://github.com/danneu/telegram-chatgpt-bot
 cd telegram-chatgpt-bot
 npm install
-node index.js
+npm start
 ```
 
 However, the bot will not boot until you configure it.
