@@ -138,13 +138,13 @@ npm install
 npm start
 ```
 
-However, the bot will not boot until you configure it.
+However, the bot will not boot until you copy `.env.sample` into a file called `.env` and fill it in with actual values. Consult the following section for more info.
 
 ## Configure environment variables
 
 The bot expects the following environment variables.
 
-You can put them in an `.env` file at the project root.
+You can put them in an `.env` file at the project root. This project comes with an `.env.sample` file with dummy values that you can base your `.env` off of.
 
 **Note:** The webhook url needs to have the path `/telegram` because that's currently hard-coded in the router.
 
